@@ -1,0 +1,120 @@
+name: Build custom RustDesk 1.4.9 x86 Sciter (9394)
+
+on:
+  push:
+    branches:
+      - "master"
+    paths:
+      - ".github/workflows/build-custom-1.4.9.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-custom-x86-sciter:
+    name: build custom x86 sciter
+    runs-on: windows-2022
+    env:
+      LLVM_VERSION: "15.0.6"
+      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+      VERSION: "1.4.9"
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and Clang (32bit)
+        uses: rustdesk-org/install-llvm-action-32bit@6aa7d9ad3df84dff01cd4596dd0fc880a7f47fce
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: nightly-2023-10-13-i686-pc-windows-msvc
+          targets: i686-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: "windows-2022-sciter-custom9394"
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x86-windows-static
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              cat "$_1"
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Patch in server config (rustdesk.9394.cn)
+        shell: bash
+        run: |
+          set -e
+          sed -i 's/pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["rs-ny.rustdesk.com"\];/pub const RENDEZVOUS_SERVERS: \&[\&str] = \&["rustdesk.9394.cn"];/' libs/hbb_common/src/config.rs
+          sed -i 's/pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";/pub const RS_PUB_KEY: \&str = "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ=";/' libs/hbb_common/src/config.rs
+          grep -n 'RENDEZVOUS_SERVERS:\|RS_PUB_KEY:' libs/hbb_common/src/config.rs
+
+      - name: Build rustdesk
+        shell: bash
+        run: |
+          set -e
+          python3 res/inline-sciter.py
+          sed -i 's/branch = "dyn"/branch = "dyn_x86"/g' ./Cargo.toml
+          cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
+          cargo build --locked --features inline,vram,hwcodec --release --bins
+          mkdir -p ./Release
+          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
+          curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
+          unzip usbmmidd_v2.zip
+          rm -rf ./usbmmidd_v2/deviceinstaller.exe ./usbmmidd_v2/usbmmidd.bat
+          mv ./usbmmidd_v2 ./Release || true
+
+      - name: find Runner.res
+        continue-on-error: true
+        shell: bash
+        run: |
+          runner_res=$(find . -name "Runner.res");
+          if [ "$runner_res" != "" ]; then
+            cp $runner_res ./libs/portable/Runner.res
+          fi
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          set -e
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-1.4.9-x86-sciter-9394
+          path: ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: "v1.4.9-custom-9394"
+          files: ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
