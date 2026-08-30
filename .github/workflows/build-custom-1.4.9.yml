@@ -23,7 +23,7 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: "1.4.9"
+          ref: "6c578292e8ebbbec708b76986ba8c4bc7c509747"
           submodules: recursive
 
       - name: Install LLVM and Clang (32bit)
