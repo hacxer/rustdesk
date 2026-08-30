@@ -1,0 +1,435 @@
+name: Build custom RustDesk 1.4.9 x64 + Android (9394)
+
+on:
+  push:
+    branches:
+      - "master"
+    paths:
+      - ".github/workflows/build-custom-1.4.9-x64-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-RustDeskTempTopMostWindow:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: true
+      target: windows-2022
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+
+  build-custom-x86_64:
+    name: build custom x86_64 exe
+    needs: [generate-bridge, build-RustDeskTempTopMostWindow]
+    runs-on: windows-2022
+    env:
+      LLVM_VERSION: "15.0.6"
+      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+      VERSION: "1.4.9"
+      FLUTTER_VERSION: "3.24.5"
+      RUST_VERSION: "1.75"
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: "6c578292e8ebbbec708b76986ba8c4bc7c509747"
+          submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        id: flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace engine with rustdesk custom engine
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/* "C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/"
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: "windows-2022-flutter-custom9394"
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              cat "$_1"
+            done
+            exit 1
+          fi
+
+      - name: Patch in server config and preset password (9394)
+        shell: bash
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PYEOF'
+          import base64
+          old = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBzdG9yYWdlID0gaGFyZF9zZXR0aW5ncy5nZXQoInBhc3N3b3JkIikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICBsZXQgc2FsdCA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJzYWx0IikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K").decode("utf-8")
+          new = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBtdXQgc3RvcmFnZSA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJwYXNzd29yZCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgbGV0IG11dCBzYWx0ID0gaGFyZF9zZXR0aW5ncy5nZXQoInNhbHQiKS5jbG9uZWQoKS51bndyYXBfb3JfZGVmYXVsdCgpOwogICAgICAgIGlmIHN0b3JhZ2UuaXNfZW1wdHkoKSAmJiBzYWx0LmlzX2VtcHR5KCkgewogICAgICAgICAgICBzdG9yYWdlID0gInFjdDEyMzQ1NiIudG9fc3RyaW5nKCk7CiAgICAgICAgfQogICAgICAgIChzdG9yYWdlLCBzYWx0KQogICAgfQo=").decode("utf-8")
+          old_t = base64.b64decode("ICBmaW5hbCBydWxlcyA9IFsKICAgIERpZ2l0VmFsaWRhdGlvblJ1bGUoKSwKICAgIFVwcGVyY2FzZVZhbGlkYXRpb25SdWxlKCksCiAgICBMb3dlcmNhc2VWYWxpZGF0aW9uUnVsZSgpLAogICAgLy8gU3BlY2lhbENoYXJhY3RlclZhbGlkYXRpb25SdWxlKCksCiAgICBNaW5DaGFyYWN0ZXJzVmFsaWRhdGlvblJ1bGUoOCksCiAgXTsK").decode("utf-8")
+          new_t = base64.b64decode("ICBmaW5hbCBydWxlcyA9IDxWYWxpZGF0aW9uUnVsZT5bXTsK").decode("utf-8")
+          def replace_once(path, old, new):
+              src = open(path, encoding="utf-8", newline="").read()
+              n = src.count(old)
+              if n != 1:
+                  crlf = old.replace("\n", "\r\n")
+                  m = src.count(crlf)
+                  if m == 1:
+                      old, n = crlf, 1
+                  else:
+                      raise SystemExit("%s anchor count=%d" % (path, n))
+              repl = new.replace("\n", "\r\n") if "\r\n" in old else new
+              out = src.replace(old, repl)
+              open(path, "w", encoding="utf-8", newline="").write(out)
+          replace_once("libs/hbb_common/src/config.rs", old, new)
+          replace_once("flutter/lib/desktop/pages/desktop_home_page.dart", old_t, new_t)
+          print("preset password + dart strength check patches applied")
+          PYEOF
+          sed -i 's/pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["rs-ny.rustdesk.com"\];/pub const RENDEZVOUS_SERVERS: \&[\&str] = \&["rustdesk.9394.cn"];/' libs/hbb_common/src/config.rs
+          sed -i 's/pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";/pub const RS_PUB_KEY: \&str = "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ=";/' libs/hbb_common/src/config.rs
+          grep -n 'RENDEZVOUS_SERVERS:\|RS_PUB_KEY:' libs/hbb_common/src/config.rs
+          grep -q 'qct123456' libs/hbb_common/src/config.rs
+          grep -q 'final rules = <ValidationRule>\[\];' flutter/lib/desktop/pages/desktop_home_page.dart
+          if grep -q 'DigitValidationRule' flutter/lib/desktop/pages/desktop_home_page.dart; then
+            echo 'dart strength rules still present'
+            exit 1
+          fi
+          echo 'all patches verified'
+
+      - name: Build rustdesk
+        shell: pwsh
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 ./rustdesk
+          try {
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1\.4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
+            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
+                Write-Output "printer driver checksums match, extract"
+                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
+                mkdir ./rustdesk/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                Expand-Archive printer_driver_adapter.zip -DestinationPath .
+                mv -Force .\printer_driver_adapter.dll ./rustdesk
+            } else {
+                Write-Output "printer driver checksums do not match, ignore"
+            }
+          } catch {
+              Write-Host "Ignore printer driver error"
+          }
+
+      - name: find Runner.res
+        continue-on-error: true
+        shell: bash
+        run: |
+          runner_res=$(find . -name "Runner.res");
+          if [ "$runner_res" != "" ]; then
+            cp $runner_res ./libs/portable/Runner.res
+          fi
+
+      - name: Download RustDeskTempTopMostWindow artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: topmostwindow-artifacts-x64
+          path: "./rustdesk"
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          set -e
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-1.4.9-x86_64-9394.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-1.4.9-x86_64-9394
+          path: ./SignOutput/rustdesk-1.4.9-x86_64-9394.exe
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        with:
+          prerelease: true
+          tag_name: "v1.4.9-custom-9394"
+          files: ./SignOutput/rustdesk-1.4.9-x86_64-9394.exe
+
+  build-custom-android:
+    name: build custom android aarch64 apk
+    needs: [generate-bridge]
+    runs-on: ubuntu-24.04
+    env:
+      RUST_VERSION: "1.75"
+      CARGO_NDK_VERSION: "3.1.2"
+      FLUTTER_VERSION: "3.24.5"
+      NDK_VERSION: "r28c"
+      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+      VERSION: "1.4.9"
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake curl gcc-multilib git g++ g++-multilib libclang-dev libunwind-dev nasm ninja-build openjdk-17-jdk-headless pkg-config tree wget
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: "6c578292e8ebbbec708b76986ba8c4bc7c509747"
+          submodules: recursive
+
+      - name: Install flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: |
+          if ! ./flutter/build_android_deps.sh "arm64-v8a"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              cat "$_1"
+            done
+            exit 1
+          fi
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: rustdesk-lib-cache-android-custom9394
+          key: aarch64-linux-android
+
+      - name: Build rustdesk lib
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+          ./flutter/ndk_arm64.sh
+          mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+
+      - name: Patch in server config and preset password (9394)
+        shell: bash
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PYEOF'
+          import base64
+          old = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBzdG9yYWdlID0gaGFyZF9zZXR0aW5ncy5nZXQoInBhc3N3b3JkIikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICBsZXQgc2FsdCA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJzYWx0IikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K").decode("utf-8")
+          new = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBtdXQgc3RvcmFnZSA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJwYXNzd29yZCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgbGV0IG11dCBzYWx0ID0gaGFyZF9zZXR0aW5ncy5nZXQoInNhbHQiKS5jbG9uZWQoKS51bndyYXBfb3JfZGVmYXVsdCgpOwogICAgICAgIGlmIHN0b3JhZ2UuaXNfZW1wdHkoKSAmJiBzYWx0LmlzX2VtcHR5KCkgewogICAgICAgICAgICBzdG9yYWdlID0gInFjdDEyMzQ1NiIudG9fc3RyaW5nKCk7CiAgICAgICAgfQogICAgICAgIChzdG9yYWdlLCBzYWx0KQogICAgfQo=").decode("utf-8")
+          old_t = base64.b64decode("ICBmaW5hbCBydWxlcyA9IFsKICAgIERpZ2l0VmFsaWRhdGlvblJ1bGUoKSwKICAgIFVwcGVyY2FzZVZhbGlkYXRpb25SdWxlKCksCiAgICBMb3dlcmNhc2VWYWxpZGF0aW9uUnVsZSgpLAogICAgLy8gU3BlY2lhbENoYXJhY3RlclZhbGlkYXRpb25SdWxlKCksCiAgICBNaW5DaGFyYWN0ZXJzVmFsaWRhdGlvblJ1bGUoOCksCiAgXTsK").decode("utf-8")
+          new_t = base64.b64decode("ICBmaW5hbCBydWxlcyA9IDxWYWxpZGF0aW9uUnVsZT5bXTsK").decode("utf-8")
+          def replace_once(path, old, new):
+              src = open(path, encoding="utf-8", newline="").read()
+              n = src.count(old)
+              if n != 1:
+                  crlf = old.replace("\n", "\r\n")
+                  m = src.count(crlf)
+                  if m == 1:
+                      old, n = crlf, 1
+                  else:
+                      raise SystemExit("%s anchor count=%d" % (path, n))
+              repl = new.replace("\n", "\r\n") if "\r\n" in old else new
+              out = src.replace(old, repl)
+              open(path, "w", encoding="utf-8", newline="").write(out)
+          replace_once("libs/hbb_common/src/config.rs", old, new)
+          replace_once("flutter/lib/desktop/pages/desktop_home_page.dart", old_t, new_t)
+          print("preset password + dart strength check patches applied")
+          PYEOF
+          sed -i 's/pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["rs-ny.rustdesk.com"\];/pub const RENDEZVOUS_SERVERS: \&[\&str] = \&["rustdesk.9394.cn"];/' libs/hbb_common/src/config.rs
+          sed -i 's/pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";/pub const RS_PUB_KEY: \&str = "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ=";/' libs/hbb_common/src/config.rs
+          grep -n 'RENDEZVOUS_SERVERS:\|RS_PUB_KEY:' libs/hbb_common/src/config.rs
+          grep -q 'qct123456' libs/hbb_common/src/config.rs
+          grep -q 'final rules = <ValidationRule>\[\];' flutter/lib/desktop/pages/desktop_home_page.dart
+          if grep -q 'DigitValidationRule' flutter/lib/desktop/pages/desktop_home_page.dart; then
+            echo 'dart strength rules still present'
+            exit 1
+          fi
+          echo 'all patches verified'
+
+      - name: Build rustdesk apk (unsigned)
+        shell: bash
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
+          cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+          pushd flutter
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../rustdesk-1.4.9-aarch64-unsigned.apk
+          popd
+          mkdir -p signed-apk
+          mv rustdesk-1.4.9-aarch64-unsigned.apk signed-apk/
+
+      - name: Generate signing keystore (9394)
+        shell: bash
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          "$JAVA_HOME/bin/keytool" -genkeypair -v \
+            -keystore "${GITHUB_WORKSPACE}/rustdesk-9394.keystore" \
+            -alias rustdesk \
+            -keyalg RSA -keysize 2048 -validity 10950 \
+            -storepass 123456 -keypass 123456 \
+            -dname "CN=9394, OU=9394, O=9394, L=Beijing, ST=Beijing, C=CN"
+
+      - name: Sign APK with apksigner
+        shell: bash
+        run: |
+          BUILD_TOOLS=$(ls -d /usr/local/lib/android/sdk/build-tools/* | tail -1)
+          echo "Using build-tools: $BUILD_TOOLS"
+          "$BUILD_TOOLS/zipalign" -f -p 4 signed-apk/rustdesk-1.4.9-aarch64-unsigned.apk signed-apk/rustdesk-1.4.9-aarch64-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign --ks "${GITHUB_WORKSPACE}/rustdesk-9394.keystore" --ks-key-alias rustdesk --ks-pass pass:123456 --key-pass pass:123456 --out signed-apk/rustdesk-1.4.9-aarch64-signed-9394.apk signed-apk/rustdesk-1.4.9-aarch64-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose signed-apk/rustdesk-1.4.9-aarch64-signed-9394.apk
+
+      - name: Prepare keystore and password files
+        shell: bash
+        run: |
+          mkdir -p signing
+          cp "${GITHUB_WORKSPACE}/rustdesk-9394.keystore" signing/
+          printf 'Keystore file: rustdesk-9394.keystore\nAlias: rustdesk\nStore password: 123456\nKey password: 123456\n' > signing/keystore-info.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-1.4.9-aarch64-signed-9394
+          path: |
+            signed-apk/rustdesk-1.4.9-aarch64-signed-9394.apk
+            signing/*
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        with:
+          prerelease: true
+          tag_name: "v1.4.9-custom-9394"
+          files: |
+            signed-apk/rustdesk-1.4.9-aarch64-signed-9394.apk
+            signing/rustdesk-9394.keystore
+            signing/keystore-info.txt
