@@ -61,14 +61,44 @@ jobs:
             exit 1
           fi
         shell: bash
+        working-directory: ${{ github.workspace }}
 
-      - name: Patch in server config (rustdesk.9394.cn)
+      - name: Patch in server config and preset password (9394)
         shell: bash
         run: |
           set -e
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PYEOF'
+          import base64
+          old = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBzdG9yYWdlID0gaGFyZF9zZXR0aW5ncy5nZXQoInBhc3N3b3JkIikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICBsZXQgc2FsdCA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJzYWx0IikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K").decode("utf-8")
+          new = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBtdXQgc3RvcmFnZSA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJwYXNzd29yZCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgbGV0IG11dCBzYWx0ID0gaGFyZF9zZXR0aW5ncy5nZXQoInNhbHQiKS5jbG9uZWQoKS51bndyYXBfb3JfZGVmYXVsdCgpOwogICAgICAgIGlmIHN0b3JhZ2UuaXNfZW1wdHkoKSAmJiBzYWx0LmlzX2VtcHR5KCkgewogICAgICAgICAgICBzdG9yYWdlID0gInFjdDEyMzQ1NiIudG9fc3RyaW5nKCk7CiAgICAgICAgfQogICAgICAgIChzdG9yYWdlLCBzYWx0KQogICAgfQo=").decode("utf-8")
+          old_t = base64.b64decode("ICAgICAgICAgICAgaWYgKHAwLmxlbmd0aCA8IDYgJiYgcDAubGVuZ3RoICE9IDApIHsKICAgICAgICAgICAgICAgIHJldHVybiB0cmFuc2xhdGUoIlRvbyBzaG9ydCwgYXQgbGVhc3QgNiBjaGFyYWN0ZXJzLiIpOwogICAgICAgICAgICB9Cg==").decode("utf-8")
+          def replace_once(path, old, new):
+              src = open(path, encoding="utf-8", newline="").read()
+              n = src.count(old)
+              if n != 1:
+                  crlf = old.replace("\n", "\r\n")
+                  m = src.count(crlf)
+                  if m == 1:
+                      old, n = crlf, 1
+                  else:
+                      raise SystemExit("%s anchor count=%d" % (path, n))
+              repl = new.replace("\n", "\r\n") if "\r\n" in old else new
+              out = src.replace(old, repl)
+              open(path, "w", encoding="utf-8", newline="").write(out)
+          replace_once("libs/hbb_common/src/config.rs", old, new)
+          replace_once("src/ui/index.tis", old_t, "")
+          print("preset password + strength check patches applied")
+          PYEOF
           sed -i 's/pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["rs-ny.rustdesk.com"\];/pub const RENDEZVOUS_SERVERS: \&[\&str] = \&["rustdesk.9394.cn"];/' libs/hbb_common/src/config.rs
           sed -i 's/pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";/pub const RS_PUB_KEY: \&str = "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ=";/' libs/hbb_common/src/config.rs
           grep -n 'RENDEZVOUS_SERVERS:\|RS_PUB_KEY:' libs/hbb_common/src/config.rs
+          grep -q 'qct123456' libs/hbb_common/src/config.rs
+          if grep -q 'p0.length < 6' src/ui/index.tis; then
+            echo 'strength check still present'
+            exit 1
+          fi
+          echo 'all patches verified'
 
       - name: Build rustdesk
         shell: bash
@@ -119,3 +149,4 @@ jobs:
           prerelease: true
           tag_name: "v1.4.9-custom-9394"
           files: ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
+
