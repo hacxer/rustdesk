@@ -212,7 +212,7 @@ jobs:
 
           def replace_once(path, old_b64, new_b64):
               target = Path(path)
-              src = target.read_text(encoding="utf-8", newline="")
+              src = target.read_bytes().decode("utf-8")
               old = decode(old_b64)
               new = decode(new_b64)
               if src.count(old) != 1:
@@ -221,7 +221,7 @@ jobs:
                       raise SystemExit(f"{path} anchor count={src.count(old)}")
                   old = old_crlf
                   new = new.replace("\n", "\r\n")
-              target.write_text(src.replace(old, new), encoding="utf-8", newline="")
+              target.write_bytes(src.replace(old, new).encode("utf-8"))
               print("patched", path)
 
 
@@ -242,7 +242,7 @@ jobs:
               target = Path(path)
               if target.exists():
                   raise SystemExit(f"refusing to overwrite {path}")
-              target.write_text(decode(value_b64), encoding="utf-8", newline="")
+              target.write_bytes(decode(value_b64).encode("utf-8"))
               print("created", path)
           PYEOF
           grep -Fq 'rustdesk.9394.cn' libs/hbb_common/src/config.rs
@@ -430,7 +430,7 @@ jobs:
 
           def replace_once(path, old_b64, new_b64):
               target = Path(path)
-              src = target.read_text(encoding="utf-8", newline="")
+              src = target.read_bytes().decode("utf-8")
               old = decode(old_b64)
               new = decode(new_b64)
               if src.count(old) != 1:
@@ -439,7 +439,7 @@ jobs:
                       raise SystemExit(f"{path} anchor count={src.count(old)}")
                   old = old_crlf
                   new = new.replace("\n", "\r\n")
-              target.write_text(src.replace(old, new), encoding="utf-8", newline="")
+              target.write_bytes(src.replace(old, new).encode("utf-8"))
               print("patched", path)
 
           patches = [
@@ -471,7 +471,7 @@ jobs:
               target = Path(path)
               if target.exists():
                   raise SystemExit(f"refusing to overwrite {path}")
-              target.write_text(decode(value_b64), encoding="utf-8", newline="")
+              target.write_bytes(decode(value_b64).encode("utf-8"))
               print("created", path)
           PYEOF
           grep -Fq 'rustdesk.9394.cn' libs/hbb_common/src/config.rs
