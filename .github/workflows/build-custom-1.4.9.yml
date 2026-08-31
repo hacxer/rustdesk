@@ -63,42 +63,60 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
 
-      - name: Patch in server config and preset password (9394)
+      - name: Patch 9394 defaults and password
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           cd "$GITHUB_WORKSPACE"
           python3 - <<'PYEOF'
           import base64
-          old = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBzdG9yYWdlID0gaGFyZF9zZXR0aW5ncy5nZXQoInBhc3N3b3JkIikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICBsZXQgc2FsdCA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJzYWx0IikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K").decode("utf-8")
-          new = base64.b64decode("ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBtdXQgc3RvcmFnZSA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJwYXNzd29yZCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgbGV0IG11dCBzYWx0ID0gaGFyZF9zZXR0aW5ncy5nZXQoInNhbHQiKS5jbG9uZWQoKS51bndyYXBfb3JfZGVmYXVsdCgpOwogICAgICAgIGlmIHN0b3JhZ2UuaXNfZW1wdHkoKSAmJiBzYWx0LmlzX2VtcHR5KCkgewogICAgICAgICAgICBzdG9yYWdlID0gInFjdDEyMzQ1NiIudG9fc3RyaW5nKCk7CiAgICAgICAgfQogICAgICAgIChzdG9yYWdlLCBzYWx0KQogICAgfQo=").decode("utf-8")
-          old_t = base64.b64decode("ICAgICAgICAgICAgaWYgKHAwLmxlbmd0aCA8IDYgJiYgcDAubGVuZ3RoICE9IDApIHsKICAgICAgICAgICAgICAgIHJldHVybiB0cmFuc2xhdGUoIlRvbyBzaG9ydCwgYXQgbGVhc3QgNiBjaGFyYWN0ZXJzLiIpOwogICAgICAgICAgICB9Cg==").decode("utf-8")
-          def replace_once(path, old, new):
-              src = open(path, encoding="utf-8", newline="").read()
-              n = src.count(old)
-              if n != 1:
-                  crlf = old.replace("\n", "\r\n")
-                  m = src.count(crlf)
-                  if m == 1:
-                      old, n = crlf, 1
-                  else:
-                      raise SystemExit("%s anchor count=%d" % (path, n))
-              repl = new.replace("\n", "\r\n") if "\r\n" in old else new
-              out = src.replace(old, repl)
-              open(path, "w", encoding="utf-8", newline="").write(out)
-          replace_once("libs/hbb_common/src/config.rs", old, new)
-          replace_once("src/ui/index.tis", old_t, "")
-          print("preset password + strength check patches applied")
+          from pathlib import Path
+
+
+          def decode(value):
+              return base64.b64decode(value).decode("utf-8")
+
+
+          def replace_once(path, old_b64, new_b64):
+              target = Path(path)
+              src = target.read_text(encoding="utf-8", newline="")
+              old = decode(old_b64)
+              new = decode(new_b64)
+              if src.count(old) != 1:
+                  old_crlf = old.replace("\n", "\r\n")
+                  if src.count(old_crlf) != 1:
+                      raise SystemExit(f"{path} anchor count={src.count(old)}")
+                  old = old_crlf
+                  new = new.replace("\n", "\r\n")
+              target.write_text(src.replace(old, new), encoding="utf-8", newline="")
+              print("patched", path)
+
+
+          patches = [
+              ("libs/hbb_common/src/config.rs", "ICAgIHB1YiBzdGF0aWMgcmVmIERFRkFVTFRfU0VUVElOR1M6IFJ3TG9jazxIYXNoTWFwPFN0cmluZywgU3RyaW5nPj4gPSBEZWZhdWx0OjpkZWZhdWx0KCk7Cg==", "ICAgIHB1YiBzdGF0aWMgcmVmIERFRkFVTFRfU0VUVElOR1M6IFJ3TG9jazxIYXNoTWFwPFN0cmluZywgU3RyaW5nPj4gPSB7CiAgICAgICAgbGV0IG11dCBkZWZhdWx0cyA9IEhhc2hNYXA6OmZyb20oWwogICAgICAgICAgICAoImN1c3RvbS1yZW5kZXp2b3VzLXNlcnZlciIudG9fb3duZWQoKSwgInJ1c3RkZXNrLjkzOTQuY24iLnRvX293bmVkKCkpLAogICAgICAgICAgICAoInJlbGF5LXNlcnZlciIudG9fb3duZWQoKSwgInJ1c3RkZXNrLjkzOTQuY24iLnRvX293bmVkKCkpLAogICAgICAgICAgICAoImFwaS1zZXJ2ZXIiLnRvX293bmVkKCksICJodHRwOi8vcnVzdGRlc2suOTM5NC5jbjoyMTExNCIudG9fb3duZWQoKSksCiAgICAgICAgICAgICgia2V5Ii50b19vd25lZCgpLCAiNlNNK05lQUgyNUJCYkkzd0xJTlVyYzU2R0pzSW1NTFd2UlRJc1FMNmZZUT0iLnRvX293bmVkKCkpLAogICAgICAgICAgICAoImRpcmVjdC1zZXJ2ZXIiLnRvX293bmVkKCksICJZIi50b19vd25lZCgpKSwKICAgICAgICAgICAgKCJhbGxvdy1udW1lcmljLW9uZS10aW1lLXBhc3N3b3JkIi50b19vd25lZCgpLCAiWSIudG9fb3duZWQoKSksCiAgICAgICAgXSk7CiAgICAgICAgI1tjZmcodGFyZ2V0X29zID0gIndpbmRvd3MiKV0KICAgICAgICBkZWZhdWx0cy5pbnNlcnQoImFsbG93LXJlbW90ZS1jb25maWctbW9kaWZpY2F0aW9uIi50b19vd25lZCgpLCAiWSIudG9fb3duZWQoKSk7CiAgICAgICAgUndMb2NrOjpuZXcoZGVmYXVsdHMpCiAgICB9Owo="),
+              ("libs/hbb_common/src/config.rs", "ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBzdG9yYWdlID0gaGFyZF9zZXR0aW5ncy5nZXQoInBhc3N3b3JkIikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICBsZXQgc2FsdCA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJzYWx0IikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K", "ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBtdXQgc3RvcmFnZSA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJwYXNzd29yZCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgbGV0IHNhbHQgPSBoYXJkX3NldHRpbmdzLmdldCgic2FsdCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgaWYgc3RvcmFnZS5pc19lbXB0eSgpICYmIHNhbHQuaXNfZW1wdHkoKSB7CiAgICAgICAgICAgIHN0b3JhZ2UgPSAicWN0MTIzNDU2Ii50b19vd25lZCgpOwogICAgICAgIH0KICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K"),
+              ("libs/hbb_common/src/config.rs", "cHViIGNvbnN0IFJFTkRFWlZPVVNfU0VSVkVSUzogJlsmc3RyXSA9ICZbInJzLW55LnJ1c3RkZXNrLmNvbSJdOw==", "cHViIGNvbnN0IFJFTkRFWlZPVVNfU0VSVkVSUzogJlsmc3RyXSA9ICZbInJ1c3RkZXNrLjkzOTQuY24iXTs="),
+              ("libs/hbb_common/src/config.rs", "cHViIGNvbnN0IFJTX1BVQl9LRVk6ICZzdHIgPSAiT2VWdUtrNW5sSGlYcCtBUE5uMFkzcEMxSXdwd240NEpHcXJRQ3NXcW1Cdz0iOw==", "cHViIGNvbnN0IFJTX1BVQl9LRVk6ICZzdHIgPSAiNlNNK05lQUgyNUJCYkkzd0xJTlVyYzU2R0pzSW1NTFd2UlRJc1FMNmZZUT0iOw=="),
+              ("src/ui/index.tis", "ICAgICAgICAgICAgaWYgKHAwLmxlbmd0aCA8IDYgJiYgcDAubGVuZ3RoICE9IDApIHsKICAgICAgICAgICAgICAgIHJldHVybiB0cmFuc2xhdGUoIlRvbyBzaG9ydCwgYXQgbGVhc3QgNiBjaGFyYWN0ZXJzLiIpOwogICAgICAgICAgICB9Cg==", ""),
+          ]
+          for patch in patches:
+              replace_once(*patch)
+
+          creates = [
+
+          ]
+          for path, value_b64 in creates:
+              target = Path(path)
+              if target.exists():
+                  raise SystemExit(f"refusing to overwrite {path}")
+              target.write_text(decode(value_b64), encoding="utf-8", newline="")
+              print("created", path)
           PYEOF
-          sed -i 's/pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["rs-ny.rustdesk.com"\];/pub const RENDEZVOUS_SERVERS: \&[\&str] = \&["rustdesk.9394.cn"];/' libs/hbb_common/src/config.rs
-          sed -i 's/pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";/pub const RS_PUB_KEY: \&str = "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ=";/' libs/hbb_common/src/config.rs
-          grep -n 'RENDEZVOUS_SERVERS:\|RS_PUB_KEY:' libs/hbb_common/src/config.rs
-          grep -q 'qct123456' libs/hbb_common/src/config.rs
-          if grep -q 'p0.length < 6' src/ui/index.tis; then
-            echo 'strength check still present'
-            exit 1
-          fi
-          echo 'all patches verified'
+          grep -Fq 'rustdesk.9394.cn' libs/hbb_common/src/config.rs
+          grep -Fq 'allow-numeric-one-time-password' libs/hbb_common/src/config.rs
+          grep -Fq 'allow-remote-config-modification' libs/hbb_common/src/config.rs
+          grep -Fq 'qct123456' libs/hbb_common/src/config.rs
+          echo '9394 source patches verified'
 
       - name: Build rustdesk
         shell: bash
@@ -149,4 +167,3 @@ jobs:
           prerelease: true
           tag_name: "v1.4.9-custom-9394"
           files: ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
-
