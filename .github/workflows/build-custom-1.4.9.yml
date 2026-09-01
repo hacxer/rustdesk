@@ -1,4 +1,4 @@
-name: Build custom RustDesk 1.4.9 x86 Sciter (9394)
+name: Build custom RustDesk 1.4.10 x86 Sciter (9394)
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     env:
       LLVM_VERSION: "15.0.6"
       VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
-      VERSION: "1.4.9"
+      VERSION: "1.4.10"
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -118,6 +118,59 @@ jobs:
           grep -Fq 'qct123456' libs/hbb_common/src/config.rs
           echo '9394 source patches verified'
 
+      - name: Patch 9394 Windows update channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PYEOF'
+          import base64
+          from pathlib import Path
+
+
+          def decode(value):
+              return base64.b64decode(value).decode("utf-8")
+
+
+          def replace_once(path, old_b64, new_b64):
+              target = Path(path)
+              src = target.read_bytes().decode("utf-8")
+              old = decode(old_b64)
+              new = decode(new_b64)
+              if src.count(old) != 1:
+                  old_crlf = old.replace("\n", "\r\n")
+                  if src.count(old_crlf) != 1:
+                      raise SystemExit(f"{path} anchor count={src.count(old)}")
+                  old = old_crlf
+                  new = new.replace("\n", "\r\n")
+              target.write_bytes(src.replace(old, new).encode("utf-8"))
+              print("patched", path)
+
+
+          patches = [
+              ("libs/hbb_common/src/config.rs", "ICAgICAgICAjW2NmZyh0YXJnZXRfb3MgPSAid2luZG93cyIpXQogICAgICAgIGRlZmF1bHRzLmluc2VydCgiYWxsb3ctcmVtb3RlLWNvbmZpZy1tb2RpZmljYXRpb24iLnRvX293bmVkKCksICJZIi50b19vd25lZCgpKTsKICAgICAgICBSd0xvY2s6Om5ldyhkZWZhdWx0cyk=", "ICAgICAgICAjW2NmZyh0YXJnZXRfb3MgPSAid2luZG93cyIpXQogICAgICAgIHsKICAgICAgICAgICAgZGVmYXVsdHMuaW5zZXJ0KCJhbGxvdy1yZW1vdGUtY29uZmlnLW1vZGlmaWNhdGlvbiIudG9fb3duZWQoKSwgIlkiLnRvX293bmVkKCkpOwogICAgICAgICAgICBkZWZhdWx0cy5pbnNlcnQoImFsbG93LWF1dG8tdXBkYXRlIi50b19vd25lZCgpLCAiWSIudG9fb3duZWQoKSk7CiAgICAgICAgfQogICAgICAgIFJ3TG9jazo6bmV3KGRlZmF1bHRzKQ=="),
+              ("libs/hbb_common/src/lib.rs", "ICAgIGNvbnN0IFVSTDogJnN0ciA9ICJodHRwczovL2FwaS5ydXN0ZGVzay5jb20vdmVyc2lvbi9sYXRlc3QiOw==", "ICAgIGNvbnN0IFVSTDogJnN0ciA9ICJodHRwOi8vYi45Mzk0LmNuL3J1c3RkZXNrL3ZlcnNpb24vbGF0ZXN0Ijs="),
+              ("src/common.rs", "ICAgIGxldCAocmVxdWVzdCwgdXJsKSA9CiAgICAgICAgaGJiX2NvbW1vbjo6dmVyc2lvbl9jaGVja19yZXF1ZXN0KGhiYl9jb21tb246OlZFUl9UWVBFX1JVU1RERVNLX0NMSUVOVC50b19zdHJpbmcoKSk7", "ICAgIGxldCAoXywgdXJsKSA9CiAgICAgICAgaGJiX2NvbW1vbjo6dmVyc2lvbl9jaGVja19yZXF1ZXN0KGhiYl9jb21tb246OlZFUl9UWVBFX1JVU1RERVNLX0NMSUVOVC50b19zdHJpbmcoKSk7"),
+              ("src/common.rs", "ICAgIGxldCBsYXRlc3RfcmVsZWFzZV9yZXNwb25zZSA9IG1hdGNoIGNsaWVudC5wb3N0KCZ1cmwpLmpzb24oJnJlcXVlc3QpLnNlbmQoKS5hd2FpdCB7", "ICAgIGxldCBsYXRlc3RfcmVsZWFzZV9yZXNwb25zZSA9IG1hdGNoIGNsaWVudC5nZXQoJnVybCkuc2VuZCgpLmF3YWl0IHs="),
+              ("src/common.rs", "ICAgICAgICAgICAgICAgIGxldCByZXNwID0gY2xpZW50LnBvc3QoJnVybCkuanNvbigmcmVxdWVzdCkuc2VuZCgpLmF3YWl0Pzs=", "ICAgICAgICAgICAgICAgIGxldCByZXNwID0gY2xpZW50LmdldCgmdXJsKS5zZW5kKCkuYXdhaXQ/Ow=="),
+              ("Cargo.toml", "bmFtZSA9ICJydXN0ZGVzayIKdmVyc2lvbiA9ICIxLjQuOSI=", "bmFtZSA9ICJydXN0ZGVzayIKdmVyc2lvbiA9ICIxLjQuMTAi"),
+              ("Cargo.lock", "bmFtZSA9ICJydXN0ZGVzayIKdmVyc2lvbiA9ICIxLjQuOSI=", "bmFtZSA9ICJydXN0ZGVzayIKdmVyc2lvbiA9ICIxLjQuMTAi"),
+              ("src/ui/index.tis", "ICAgICAgICBoYW5kbGVyLm9wZW5fdXJsKCJodHRwczovL3J1c3RkZXNrLmNvbS9kb3dubG9hZCIpOwogICAgICAgIHJldHVybjs=", "ICAgICAgICBoYW5kbGVyLm9wZW5fdXJsKHNvZnR3YXJlX3VwZGF0ZV91cmwpOwogICAgICAgIHJldHVybjs="),
+          ]
+          for patch in patches:
+              replace_once(*patch)
+          PYEOF
+          grep -Fq 'http://b.9394.cn/rustdesk/version/latest' libs/hbb_common/src/lib.rs
+          grep -Fq 'allow-auto-update' libs/hbb_common/src/config.rs
+          grep -Fq 'client.get(&url).send().await' src/common.rs
+          if grep -Fq 'client.post(&url).json(&request)' src/common.rs; then
+            echo 'legacy POST update request is still present' >&2
+            exit 1
+          fi
+          grep -Fq 'version = "1.4.10"' Cargo.toml
+          grep -Fq 'handler.open_url(software_update_url)' src/ui/index.tis
+          echo '9394 Windows update channel patches verified'
+
       - name: Build rustdesk
         shell: bash
         run: |
@@ -153,17 +206,23 @@ jobs:
           python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
           popd
           mkdir -p ./SignOutput
-          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
+          cp ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-1.4.10-x86-sciter.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-1.4.10-x86-sciter-9394.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: rustdesk-1.4.9-x86-sciter-9394
-          path: ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
+          name: rustdesk-1.4.10-x86-sciter-9394
+          path: |
+            ./SignOutput/rustdesk-1.4.10-x86-sciter.exe
+            ./SignOutput/rustdesk-1.4.10-x86-sciter-9394.exe
 
       - name: Publish Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           prerelease: true
-          tag_name: "v1.4.9-custom-9394"
-          files: ./SignOutput/rustdesk-1.4.9-x86-sciter-9394.exe
+          tag_name: "1.4.10"
+          files: |
+            ./SignOutput/rustdesk-1.4.10-x86-sciter.exe
+            ./SignOutput/rustdesk-1.4.10-x86-sciter-9394.exe
+
