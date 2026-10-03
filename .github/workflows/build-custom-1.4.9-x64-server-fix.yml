@@ -1,0 +1,354 @@
+name: Build RustDesk 1.4.9 Windows x64 server defaults fix (9394)
+
+on:
+  push:
+    branches:
+      - "master"
+    paths:
+      - ".github/workflows/build-custom-1.4.9-x64-server-fix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate_bridge_149:
+    name: generate bridge (1.4.9)
+    runs-on: ubuntu-22.04
+    env:
+      CARGO_EXPAND_VERSION: "1.0.95"
+      FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+      RUST_VERSION: "1.75"
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: "6c578292e8ebbbec708b76986ba8c4bc7c509747"
+          submodules: recursive
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get install ca-certificates -y
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            curl \
+            gcc \
+            git \
+            g++ \
+            libclang-dev \
+            libgtk-3-dev \
+            llvm-dev \
+            nasm \
+            ninja-build \
+            pkg-config \
+            wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: bridge-ubuntu-22.04
+
+      - name: Cache Bridge
+        id: cache-bridge
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+        with:
+          path: /tmp/flutter_rust_bridge
+          key: bridge-3.22.3-1.4.9
+
+      - name: Install flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: "stable"
+          flutter-version: "3.22.3"
+          cache: true
+
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          # Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
+          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+          pushd flutter && flutter pub get && popd
+
+      - name: Fix missing and empty server options (9394)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import subprocess
+          patch = '--- a/libs/hbb_common/src/config.rs\n+++ b/libs/hbb_common/src/config.rs\n@@ -486,6 +486,30 @@\n     path\n }\n \n+pub const SERVER_DEFAULTS_9394: &[(&str, &str)] = &[\n+    ("custom-rendezvous-server", "rustdesk.9394.cn"),\n+    ("relay-server", "rustdesk.9394.cn"),\n+    ("api-server", "http://rustdesk.9394.cn:21114"),\n+    ("key", "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ="),\n+];\n+\n+pub fn server_option_or_default_9394(key: &str, value: String) -> String {\n+    if value.trim().is_empty() {\n+        if let Some((_, default)) = SERVER_DEFAULTS_9394.iter().find(|(k, _)| *k == key) {\n+            return (*default).to_owned();\n+        }\n+    }\n+    value\n+}\n+\n+pub fn apply_server_defaults_9394(options: &mut HashMap<String, String>) {\n+    for &(key, default) in SERVER_DEFAULTS_9394 {\n+        if options.get(key).map_or(true, |value| value.trim().is_empty()) {\n+            options.insert(key.to_owned(), default.to_owned());\n+        }\n+    }\n+}\n+\n impl Config2 {\n     fn load() -> Config2 {\n         let mut config = Config::load_::<Config2>("2");\n@@ -1221,6 +1245,7 @@\n         let mut res = DEFAULT_SETTINGS.read().unwrap().clone();\n         res.extend(CONFIG2.read().unwrap().options.clone());\n         res.extend(OVERWRITE_SETTINGS.read().unwrap().clone());\n+        apply_server_defaults_9394(&mut res);\n         res\n     }\n \n@@ -1240,13 +1265,13 @@\n     }\n \n     pub fn get_option(k: &str) -> String {\n-        get_or(\n+        server_option_or_default_9394(k, get_or(\n             &OVERWRITE_SETTINGS,\n             &CONFIG2.read().unwrap().options,\n             &DEFAULT_SETTINGS,\n             k,\n         )\n-        .unwrap_or_default()\n+        .unwrap_or_default())\n     }\n \n     pub fn get_bool_option(k: &str) -> bool {\n@@ -4023,3 +4048,49 @@\n         assert_ne!(non_service_root, non_service_user);\n     }\n }\n+\n+#[cfg(test)]\n+mod server_defaults_9394_tests {\n+    use super::*;\n+\n+    #[test]\n+    fn test_9394_server_defaults() {\n+        let saved_config = CONFIG2.read().unwrap().clone();\n+        let saved_overwrite = OVERWRITE_SETTINGS.read().unwrap().clone();\n+        OVERWRITE_SETTINGS.write().unwrap().clear();\n+        CONFIG2.write().unwrap().options.clear();\n+        for &(key, expected) in SERVER_DEFAULTS_9394 {\n+            assert_eq!(Config::get_option(key), expected, "fresh single option {key}");\n+            assert_eq!(Config::get_options().get(key).unwrap(), expected, "fresh map {key}");\n+        }\n+        for blank in ["", " ", "\\t\\r\\n"] {\n+            for &(key, expected) in SERVER_DEFAULTS_9394 {\n+                CONFIG2.write().unwrap().options.insert(key.to_owned(), blank.to_owned());\n+                assert_eq!(Config::get_option(key), expected, "legacy blank single {key}");\n+                assert_eq!(Config::get_options().get(key).unwrap(), expected, "legacy blank map {key}");\n+            }\n+        }\n+        let custom = [("custom-rendezvous-server", "other-id.example:21116"),\n+            ("relay-server", "other-relay.example:21117"),\n+            ("api-server", "https://other-api.example"), ("key", "other-public-key")];\n+        for &(key, value) in &custom {\n+            CONFIG2.write().unwrap().options.insert(key.to_owned(), value.to_owned());\n+            assert_eq!(Config::get_option(key), value);\n+            assert_eq!(Config::get_options().get(key).unwrap(), value);\n+        }\n+        OVERWRITE_SETTINGS.write().unwrap().insert("relay-server".to_owned(), "policy-relay".to_owned());\n+        assert_eq!(Config::get_option("relay-server"), "policy-relay");\n+        assert_eq!(Config::get_options().get("relay-server").unwrap(), "policy-relay");\n+        let mut legacy_service = HashMap::new();\n+        legacy_service.insert("enable-audio".to_owned(), "N".to_owned());\n+        apply_server_defaults_9394(&mut legacy_service);\n+        for &(key, expected) in SERVER_DEFAULTS_9394 {\n+            assert_eq!(legacy_service.get(key).unwrap(), expected);\n+        }\n+        assert_eq!(legacy_service.get("enable-audio").unwrap(), "N");\n+        assert_eq!(server_option_or_default_9394("unrelated", String::new()), "");\n+        *CONFIG2.write().unwrap() = saved_config;\n+        *OVERWRITE_SETTINGS.write().unwrap() = saved_overwrite;\n+        println!("9394 regression passed: fresh, persisted blanks, old service, custom values, policy values");\n+    }\n+}\n--- a/src/ui_interface.rs\n+++ b/src/ui_interface.rs\n@@ -161,6 +161,7 @@\n \n #[inline]\n pub fn get_option<T: AsRef<str>>(key: T) -> String {\n+    let value = {\n     #[cfg(not(any(target_os = "android", target_os = "ios")))]\n     {\n         let map = OPTIONS.lock().unwrap();\n@@ -174,6 +175,8 @@\n     {\n         Config::get_option(key.as_ref())\n     }\n+    };\n+    config::server_option_or_default_9394(key.as_ref(), value)\n }\n \n #[inline]\n@@ -335,16 +338,17 @@\n \n #[inline]\n pub fn get_options() -> String {\n-    let options = {\n+    let mut options = {\n         #[cfg(not(any(target_os = "android", target_os = "ios")))]\n         {\n-            OPTIONS.lock().unwrap()\n+            OPTIONS.lock().unwrap().clone()\n         }\n         #[cfg(any(target_os = "android", target_os = "ios"))]\n         {\n             Config::get_options()\n         }\n     };\n+    config::apply_server_defaults_9394(&mut options);\n     let mut m = serde_json::Map::new();\n     for (k, v) in options.iter() {\n         m.insert(k.into(), v.to_owned().into());\n'
+          subprocess.run(['git', 'apply', '--check', '-'], input=patch.encode(), check=True)
+          subprocess.run(['git', 'apply', '-'], input=patch.encode(), check=True)
+          print('9394 backend and desktop IPC fallback patched')
+          PYEOF
+
+      - name: Regression test server defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p hbb_common test_9394_server_defaults -- --test-threads=1 --nocapture
+
+      - name: Run flutter rust bridge
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bridge-artifact
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+            ./flutter/macos/Runner/bridge_generated.h
+            ./flutter/ios/Runner/bridge_generated.h
+
+  build-RustDeskTempTopMostWindow:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: true
+      target: windows-2022
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+
+  build-custom-x86_64:
+    name: build custom x86_64 exe
+    needs: [generate_bridge_149, build-RustDeskTempTopMostWindow]
+    runs-on: windows-2022
+    env:
+      LLVM_VERSION: "15.0.6"
+      VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+      VERSION: "1.4.9"
+      FLUTTER_VERSION: "3.24.5"
+      RUST_VERSION: "1.75"
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: "6c578292e8ebbbec708b76986ba8c4bc7c509747"
+          submodules: recursive
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        id: flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace engine with rustdesk custom engine
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/* "C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/"
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: "windows-2022-flutter-custom9394"
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              cat "$_1"
+            done
+            exit 1
+          fi
+
+      - name: Patch 9394 defaults and password
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PYEOF'
+          import base64
+          from pathlib import Path
+
+
+          def decode(value):
+              return base64.b64decode(value).decode("utf-8")
+
+
+          def replace_once(path, old_b64, new_b64):
+              target = Path(path)
+              src = target.read_bytes().decode("utf-8")
+              old = decode(old_b64)
+              new = decode(new_b64)
+              if src.count(old) != 1:
+                  old_crlf = old.replace("\n", "\r\n")
+                  if src.count(old_crlf) != 1:
+                      raise SystemExit(f"{path} anchor count={src.count(old)}")
+                  old = old_crlf
+                  new = new.replace("\n", "\r\n")
+              target.write_bytes(src.replace(old, new).encode("utf-8"))
+              print("patched", path)
+
+
+          patches = [
+              ("libs/hbb_common/src/config.rs", "ICAgIHB1YiBzdGF0aWMgcmVmIERFRkFVTFRfU0VUVElOR1M6IFJ3TG9jazxIYXNoTWFwPFN0cmluZywgU3RyaW5nPj4gPSBEZWZhdWx0OjpkZWZhdWx0KCk7Cg==", "ICAgIHB1YiBzdGF0aWMgcmVmIERFRkFVTFRfU0VUVElOR1M6IFJ3TG9jazxIYXNoTWFwPFN0cmluZywgU3RyaW5nPj4gPSB7CiAgICAgICAgbGV0IG11dCBkZWZhdWx0cyA9IEhhc2hNYXA6OmZyb20oWwogICAgICAgICAgICAoImN1c3RvbS1yZW5kZXp2b3VzLXNlcnZlciIudG9fb3duZWQoKSwgInJ1c3RkZXNrLjkzOTQuY24iLnRvX293bmVkKCkpLAogICAgICAgICAgICAoInJlbGF5LXNlcnZlciIudG9fb3duZWQoKSwgInJ1c3RkZXNrLjkzOTQuY24iLnRvX293bmVkKCkpLAogICAgICAgICAgICAoImFwaS1zZXJ2ZXIiLnRvX293bmVkKCksICJodHRwOi8vcnVzdGRlc2suOTM5NC5jbjoyMTExNCIudG9fb3duZWQoKSksCiAgICAgICAgICAgICgia2V5Ii50b19vd25lZCgpLCAiNlNNK05lQUgyNUJCYkkzd0xJTlVyYzU2R0pzSW1NTFd2UlRJc1FMNmZZUT0iLnRvX293bmVkKCkpLAogICAgICAgICAgICAoImRpcmVjdC1zZXJ2ZXIiLnRvX293bmVkKCksICJZIi50b19vd25lZCgpKSwKICAgICAgICAgICAgKCJhbGxvdy1udW1lcmljLW9uZS10aW1lLXBhc3N3b3JkIi50b19vd25lZCgpLCAiWSIudG9fb3duZWQoKSksCiAgICAgICAgXSk7CiAgICAgICAgI1tjZmcodGFyZ2V0X29zID0gIndpbmRvd3MiKV0KICAgICAgICBkZWZhdWx0cy5pbnNlcnQoImFsbG93LXJlbW90ZS1jb25maWctbW9kaWZpY2F0aW9uIi50b19vd25lZCgpLCAiWSIudG9fb3duZWQoKSk7CiAgICAgICAgUndMb2NrOjpuZXcoZGVmYXVsdHMpCiAgICB9Owo="),
+              ("libs/hbb_common/src/config.rs", "ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBzdG9yYWdlID0gaGFyZF9zZXR0aW5ncy5nZXQoInBhc3N3b3JkIikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICBsZXQgc2FsdCA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJzYWx0IikuY2xvbmVkKCkudW53cmFwX29yX2RlZmF1bHQoKTsKICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K", "ICAgIHB1YiBmbiBnZXRfcHJlc2V0X3Bhc3N3b3JkX3N0b3JhZ2VfYW5kX3NhbHQoKSAtPiAoU3RyaW5nLCBTdHJpbmcpIHsKICAgICAgICBsZXQgaGFyZF9zZXR0aW5ncyA9IEhBUkRfU0VUVElOR1MucmVhZCgpLnVud3JhcCgpOwogICAgICAgIGxldCBtdXQgc3RvcmFnZSA9IGhhcmRfc2V0dGluZ3MuZ2V0KCJwYXNzd29yZCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgbGV0IHNhbHQgPSBoYXJkX3NldHRpbmdzLmdldCgic2FsdCIpLmNsb25lZCgpLnVud3JhcF9vcl9kZWZhdWx0KCk7CiAgICAgICAgaWYgc3RvcmFnZS5pc19lbXB0eSgpICYmIHNhbHQuaXNfZW1wdHkoKSB7CiAgICAgICAgICAgIHN0b3JhZ2UgPSAicWN0MTIzNDU2Ii50b19vd25lZCgpOwogICAgICAgIH0KICAgICAgICAoc3RvcmFnZSwgc2FsdCkKICAgIH0K"),
+              ("libs/hbb_common/src/config.rs", "cHViIGNvbnN0IFJFTkRFWlZPVVNfU0VSVkVSUzogJlsmc3RyXSA9ICZbInJzLW55LnJ1c3RkZXNrLmNvbSJdOw==", "cHViIGNvbnN0IFJFTkRFWlZPVVNfU0VSVkVSUzogJlsmc3RyXSA9ICZbInJ1c3RkZXNrLjkzOTQuY24iXTs="),
+              ("libs/hbb_common/src/config.rs", "cHViIGNvbnN0IFJTX1BVQl9LRVk6ICZzdHIgPSAiT2VWdUtrNW5sSGlYcCtBUE5uMFkzcEMxSXdwd240NEpHcXJRQ3NXcW1Cdz0iOw==", "cHViIGNvbnN0IFJTX1BVQl9LRVk6ICZzdHIgPSAiNlNNK05lQUgyNUJCYkkzd0xJTlVyYzU2R0pzSW1NTFd2UlRJc1FMNmZZUT0iOw=="),
+              ("flutter/lib/desktop/pages/desktop_home_page.dart", "ICBmaW5hbCBydWxlcyA9IFsKICAgIERpZ2l0VmFsaWRhdGlvblJ1bGUoKSwKICAgIFVwcGVyY2FzZVZhbGlkYXRpb25SdWxlKCksCiAgICBMb3dlcmNhc2VWYWxpZGF0aW9uUnVsZSgpLAogICAgLy8gU3BlY2lhbENoYXJhY3RlclZhbGlkYXRpb25SdWxlKCksCiAgICBNaW5DaGFyYWN0ZXJzVmFsaWRhdGlvblJ1bGUoOCksCiAgXTsK", "ICBmaW5hbCBydWxlcyA9IDxWYWxpZGF0aW9uUnVsZT5bXTsK"),
+          ]
+          for patch in patches:
+              replace_once(*patch)
+
+          creates = [
+
+          ]
+          for path, value_b64 in creates:
+              target = Path(path)
+              if target.exists():
+                  raise SystemExit(f"refusing to overwrite {path}")
+              target.write_bytes(decode(value_b64).encode("utf-8"))
+              print("created", path)
+          PYEOF
+          grep -Fq 'rustdesk.9394.cn' libs/hbb_common/src/config.rs
+          grep -Fq 'allow-numeric-one-time-password' libs/hbb_common/src/config.rs
+          grep -Fq 'allow-remote-config-modification' libs/hbb_common/src/config.rs
+          grep -Fq 'qct123456' libs/hbb_common/src/config.rs
+          echo '9394 source patches verified'
+
+      - name: Fix missing and empty server options (9394)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import subprocess
+          patch = '--- a/libs/hbb_common/src/config.rs\n+++ b/libs/hbb_common/src/config.rs\n@@ -486,6 +486,30 @@\n     path\n }\n \n+pub const SERVER_DEFAULTS_9394: &[(&str, &str)] = &[\n+    ("custom-rendezvous-server", "rustdesk.9394.cn"),\n+    ("relay-server", "rustdesk.9394.cn"),\n+    ("api-server", "http://rustdesk.9394.cn:21114"),\n+    ("key", "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ="),\n+];\n+\n+pub fn server_option_or_default_9394(key: &str, value: String) -> String {\n+    if value.trim().is_empty() {\n+        if let Some((_, default)) = SERVER_DEFAULTS_9394.iter().find(|(k, _)| *k == key) {\n+            return (*default).to_owned();\n+        }\n+    }\n+    value\n+}\n+\n+pub fn apply_server_defaults_9394(options: &mut HashMap<String, String>) {\n+    for &(key, default) in SERVER_DEFAULTS_9394 {\n+        if options.get(key).map_or(true, |value| value.trim().is_empty()) {\n+            options.insert(key.to_owned(), default.to_owned());\n+        }\n+    }\n+}\n+\n impl Config2 {\n     fn load() -> Config2 {\n         let mut config = Config::load_::<Config2>("2");\n@@ -1221,6 +1245,7 @@\n         let mut res = DEFAULT_SETTINGS.read().unwrap().clone();\n         res.extend(CONFIG2.read().unwrap().options.clone());\n         res.extend(OVERWRITE_SETTINGS.read().unwrap().clone());\n+        apply_server_defaults_9394(&mut res);\n         res\n     }\n \n@@ -1240,13 +1265,13 @@\n     }\n \n     pub fn get_option(k: &str) -> String {\n-        get_or(\n+        server_option_or_default_9394(k, get_or(\n             &OVERWRITE_SETTINGS,\n             &CONFIG2.read().unwrap().options,\n             &DEFAULT_SETTINGS,\n             k,\n         )\n-        .unwrap_or_default()\n+        .unwrap_or_default())\n     }\n \n     pub fn get_bool_option(k: &str) -> bool {\n@@ -4023,3 +4048,49 @@\n         assert_ne!(non_service_root, non_service_user);\n     }\n }\n+\n+#[cfg(test)]\n+mod server_defaults_9394_tests {\n+    use super::*;\n+\n+    #[test]\n+    fn test_9394_server_defaults() {\n+        let saved_config = CONFIG2.read().unwrap().clone();\n+        let saved_overwrite = OVERWRITE_SETTINGS.read().unwrap().clone();\n+        OVERWRITE_SETTINGS.write().unwrap().clear();\n+        CONFIG2.write().unwrap().options.clear();\n+        for &(key, expected) in SERVER_DEFAULTS_9394 {\n+            assert_eq!(Config::get_option(key), expected, "fresh single option {key}");\n+            assert_eq!(Config::get_options().get(key).unwrap(), expected, "fresh map {key}");\n+        }\n+        for blank in ["", " ", "\\t\\r\\n"] {\n+            for &(key, expected) in SERVER_DEFAULTS_9394 {\n+                CONFIG2.write().unwrap().options.insert(key.to_owned(), blank.to_owned());\n+                assert_eq!(Config::get_option(key), expected, "legacy blank single {key}");\n+                assert_eq!(Config::get_options().get(key).unwrap(), expected, "legacy blank map {key}");\n+            }\n+        }\n+        let custom = [("custom-rendezvous-server", "other-id.example:21116"),\n+            ("relay-server", "other-relay.example:21117"),\n+            ("api-server", "https://other-api.example"), ("key", "other-public-key")];\n+        for &(key, value) in &custom {\n+            CONFIG2.write().unwrap().options.insert(key.to_owned(), value.to_owned());\n+            assert_eq!(Config::get_option(key), value);\n+            assert_eq!(Config::get_options().get(key).unwrap(), value);\n+        }\n+        OVERWRITE_SETTINGS.write().unwrap().insert("relay-server".to_owned(), "policy-relay".to_owned());\n+        assert_eq!(Config::get_option("relay-server"), "policy-relay");\n+        assert_eq!(Config::get_options().get("relay-server").unwrap(), "policy-relay");\n+        let mut legacy_service = HashMap::new();\n+        legacy_service.insert("enable-audio".to_owned(), "N".to_owned());\n+        apply_server_defaults_9394(&mut legacy_service);\n+        for &(key, expected) in SERVER_DEFAULTS_9394 {\n+            assert_eq!(legacy_service.get(key).unwrap(), expected);\n+        }\n+        assert_eq!(legacy_service.get("enable-audio").unwrap(), "N");\n+        assert_eq!(server_option_or_default_9394("unrelated", String::new()), "");\n+        *CONFIG2.write().unwrap() = saved_config;\n+        *OVERWRITE_SETTINGS.write().unwrap() = saved_overwrite;\n+        println!("9394 regression passed: fresh, persisted blanks, old service, custom values, policy values");\n+    }\n+}\n--- a/src/ui_interface.rs\n+++ b/src/ui_interface.rs\n@@ -161,6 +161,7 @@\n \n #[inline]\n pub fn get_option<T: AsRef<str>>(key: T) -> String {\n+    let value = {\n     #[cfg(not(any(target_os = "android", target_os = "ios")))]\n     {\n         let map = OPTIONS.lock().unwrap();\n@@ -174,6 +175,8 @@\n     {\n         Config::get_option(key.as_ref())\n     }\n+    };\n+    config::server_option_or_default_9394(key.as_ref(), value)\n }\n \n #[inline]\n@@ -335,16 +338,17 @@\n \n #[inline]\n pub fn get_options() -> String {\n-    let options = {\n+    let mut options = {\n         #[cfg(not(any(target_os = "android", target_os = "ios")))]\n         {\n-            OPTIONS.lock().unwrap()\n+            OPTIONS.lock().unwrap().clone()\n         }\n         #[cfg(any(target_os = "android", target_os = "ios"))]\n         {\n             Config::get_options()\n         }\n     };\n+    config::apply_server_defaults_9394(&mut options);\n     let mut m = serde_json::Map::new();\n     for (k, v) in options.iter() {\n         m.insert(k.into(), v.to_owned().into());\n'
+          subprocess.run(['git', 'apply', '--check', '-'], input=patch.encode(), check=True)
+          subprocess.run(['git', 'apply', '-'], input=patch.encode(), check=True)
+          print('9394 backend and desktop IPC fallback patched')
+          PYEOF
+
+      - name: Build rustdesk
+        shell: pwsh
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 ./rustdesk
+          try {
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1\.4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
+            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
+                Write-Output "printer driver checksums match, extract"
+                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
+                mkdir ./rustdesk/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                Expand-Archive printer_driver_adapter.zip -DestinationPath .
+                mv -Force .\printer_driver_adapter.dll ./rustdesk
+            } else {
+                Write-Output "printer driver checksums do not match, ignore"
+            }
+          } catch {
+              Write-Host "Ignore printer driver error"
+          }
+
+      - name: find Runner.res
+        continue-on-error: true
+        shell: bash
+        run: |
+          runner_res=$(find . -name "Runner.res");
+          if [ "$runner_res" != "" ]; then
+            cp $runner_res ./libs/portable/Runner.res
+          fi
+
+      - name: Download RustDeskTempTopMostWindow artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: topmostwindow-artifacts-x64
+          path: "./rustdesk"
+
+      - name: Build self-extracted executable
+        shell: bash
+        run: |
+          set -e
+          sed -i '/dpiAware/d' res/manifest.xml
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          popd
+          mkdir -p ./SignOutput
+          mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-1.4.9-x86_64-9394-serverfix.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-1.4.9-x86_64-9394-serverfix
+          path: ./SignOutput/rustdesk-1.4.9-x86_64-9394-serverfix.exe
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        with:
+          prerelease: true
+          tag_name: "v1.4.9-custom-9394"
+          files: ./SignOutput/rustdesk-1.4.9-x86_64-9394-serverfix.exe
