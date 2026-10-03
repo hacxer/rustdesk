@@ -95,7 +95,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo test --locked -p hbb_common test_9394_server_defaults -- --test-threads=1 --nocapture
+          rustup toolchain install 1.90.0 --profile minimal
+          CARGO_TARGET_DIR=target/server-defaults-regression cargo +1.90.0 test --locked -p hbb_common test_9394_server_defaults -- --test-threads=1 --nocapture
 
       - name: Run flutter rust bridge
         run: |
