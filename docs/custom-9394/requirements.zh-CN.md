@@ -1,0 +1,183 @@
+# RustDesk 9394 定制客户端：需求与实施方案
+
+- 版本：0.1，2026-10-18（Asia/Shanghai）
+- 仓库：https://github.com/hacxer/rustdesk
+- 状态：方案阶段。本次只提交本文，产品代码和构建工作流尚未修改，尚未编译。
+- 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
+
+## 1. 需求清单
+
+| 编号 | 需求 | 约定 |
+| --- | --- | --- |
+| R01 | 跟进上游最新版 | 首版以当前最新稳定版 1.5.0 为基线；另提供明确指定 master 提交的测试渠道 |
+| R02 | ID 服务器 | rustdesk.9394.cn |
+| R03 | 中继服务器 | rustdesk.9394.cn |
+| R04 | API 服务器 | http://rustdesk.9394.cn:21114 |
+| R05 | 公钥 | 6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ= |
+| R06 | 允许远程修改配置 | 新安装默认开启 |
+| R07 | 一次性密码 | 纯数字，沿用上游默认 6 位；保留刷新逻辑 |
+| R08 | 固定密码 | 使用用户本次指定的值；由 GitHub Secret RUSTDESK_PRESET_PASSWORD 注入，不在公开文档或日志记录明文 |
+| R09 | 验证方式 | 临时密码和固定密码均可使用 |
+| R10 | IP 直接访问 | 新安装默认开启；实际连接仍需网络和防火墙允许 |
+| R11 | 默认开机启动服务 | Windows 完成安装后自动启动服务；Android 默认开启启动意愿，按系统权限和版本限制启动 |
+| R12 | 全程 GitHub | 需求、源码编辑、测试、编译、签名与打包均在 GitHub/Actions，不在用户电脑安装编译工具 |
+| R13 | 先方案再开发 | 方案提交并供用户评审后进入代码开发 |
+| R14 | 文档先于代码 | 每个问题先登记需求、复现和验收标准，再修改代码 |
+| R15 | armv7 优先 | 首先仅构建 armv7-signed.apk；通过签名、ABI、配置检查及设备验收后再构建 aarch64-signed.apk 和 x86_64.exe |
+| R16 | 沿用 Android 签名 | 使用用户提供的旧证书材料，核对旧 APK 签名指纹，保持兼容包名并提高 versionCode |
+
+“默认”是新安装或尚未明确设置时的初始值，不在每次启动时重置用户设置。保留非空自定义服务器和用户后来修改的开关。固定密码只初始化一次，用户修改或清除后，重启和升级不恢复初始值；若未来需要强制锁定，应先修改本文。
+
+统一预置密码由所有设备共用；二进制不能可靠保密其预置值。Secrets 用于避免公开仓库和日志额外泄露，不代表可防止二进制分析。
+
+## 2. 本次源码核对基线
+
+| 项目 | SHA / 版本 |
+| --- | --- |
+| 最新稳定版 | 1.5.0 |
+| 稳定版提交 | fada664df7a294d1d1a9ca3e7cd3637069122f17 |
+| 稳定版 hbb_common 子模块 | 229b904508364c8997aad0fb5af57effac859f60 |
+| 上游 master（核对时） | 53996e3c404ea5083df0775057e4149e49102084 |
+| master 的 hbb_common 子模块 | 5d52530b636fb296a324260b074780cf559e0093 |
+| 用户仓库 master（本文提交前） | 85fdd602a941afcc2980b51ab53c7fc8f165cae1 |
+
+每次构建只解析一次版本，冻结真实 SHA，各平台使用相同来源。构建清单记录父仓库、子模块、定制补丁、配置摘要及工具链版本，不能只更改文件名或版本字符串。
+
+来源：[稳定版](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0)、[稳定版提交](https://github.com/rustdesk/rustdesk/commit/fada664df7a294d1d1a9ca3e7cd3637069122f17)、[master 提交](https://github.com/rustdesk/rustdesk/commit/53996e3c404ea5083df0775057e4149e49102084)。
+
+## 3. 参数配置位置与实现依据
+
+### 3.1 实际配置键
+
+| 界面/行为 | 配置键 | 初始值 |
+| --- | --- | --- |
+| ID 服务器 | custom-rendezvous-server | rustdesk.9394.cn |
+| 中继服务器 | relay-server | rustdesk.9394.cn |
+| API 服务器 | api-server | http://rustdesk.9394.cn:21114 |
+| Key | key | R05 中的公钥 |
+| 允许远程修改配置 | allow-remote-config-modification | Y |
+| 纯数字一次性密码 | allow-numeric-one-time-password | Y |
+| 一次性密码长度 | temporary-password-length | 6 |
+| 允许 IP 直接访问 | direct-server | Y |
+| 服务停止标记 | stop-service | N（新安装） |
+| 密码验证方式 | verification-method | 保留上游两类密码均可的默认行为 |
+
+布尔值按上游 Y/N 语义设置，不能任意替换成字符串 true/false。纯数字密码已有专用选项，不修改随机密码通用字符表，以免影响盐和其他密码生成。
+
+### 3.2 核心源码
+
+- 1.5.0 的客户端选项入口是 libs/base/src/config/keys.rs，重导出 hbb_common 中少量共用键。
+- 配置读取、优先级、持久化位于 libs/hbb_common/src/config.rs。
+- 优先级：OVERWRITE_SETTINGS 强制覆盖 > CONFIG2.options 设备持久化设置 > DEFAULT_SETTINGS 默认设置。
+- 本项目使用可修改的默认值，优先写入 DEFAULT_SETTINGS，不把普通服务器参数和开关锁入 OVERWRITE_SETTINGS。
+- 固定密码不是普通 options 中增加 password 即可。应在正确配置目录及进程上下文调用 Config::set_permanent_password，并检查写入结果；桌面服务场景还须核对 IPC 确认与密码同步。
+- 数字密码生成位于 hbb_common/src/password_security.rs，读取 allow-numeric-one-time-password。
+- 桌面 UI 通过 src/ui_interface.rs / src/ipc.rs 获取服务配置；界面显示正确不能代替后台服务验证。
+- 只改官方 RENDEZVOUS_SERVERS 和 RS_PUB_KEY 常量不足以设置中继、API 和服务配置。
+- src/common.rs 中 custom.txt 读取链会验证官方签名，任意自制 JSON 不能直接当成官方定制配置使用。
+
+拟采用单一公开配置文件加独立 9394 默认配置模块。在桌面、系统服务、Android 共用初始化链路尽早加载，开发时验证其先于首次取配置和首次生成临时密码。客户端专用逻辑优先放客户端模块，尽量保留 hbb_common 子模块原样；确需修改子模块时先记录原因与范围。
+
+旧版本持久化的空白服务器字段可能遮蔽默认值，需要对四项服务器字段做有版本标记的一次性迁移，保留有效非空自定义值。单项 getter、整表 getter、桌面 UI 缓存与服务实际使用的值应一致，不能仅给输入框填默认文字。
+
+来源：[选项键](https://github.com/rustdesk/rustdesk/blob/1.5.0/libs/base/src/config/keys.rs)、[配置核心](https://github.com/rustdesk/hbb_common/blob/229b904508364c8997aad0fb5af57effac859f60/src/config.rs)、[密码生成](https://github.com/rustdesk/hbb_common/blob/229b904508364c8997aad0fb5af57effac859f60/src/password_security.rs)、[公共初始化及定制配置读取](https://github.com/rustdesk/rustdesk/blob/1.5.0/src/common.rs)、[IPC](https://github.com/rustdesk/rustdesk/blob/1.5.0/src/ipc.rs)。
+
+### 3.3 开机启动的平台差异
+
+Windows：上游 src/platform/windows.rs 的 get_create_service 已使用 start= auto 并启动服务。沿用安装和管理员授权流程，核对 stop-service、普通用户与系统服务配置同步及重启。便携 EXE 未安装系统服务时，不能仅靠默认开关保证无人登录运行；该项验收以完成安装为准。x86_64.exe 若没有代码签名证书，准确标注未做 Authenticode 签名。
+
+Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；BootReceiver.kt 与 MainActivity.kt 对 KEY_START_ON_BOOT_OPT 的缺省值为 false。需要统一首次初始化、读取和 UI 状态，并尊重已明确保存的 false。BootReceiver 还检查电池优化及悬浮窗授权；屏幕捕获、无障碍输入、通知和后台启动受系统版本及厂商限制。首次启动提供必要授权引导，分别验证服务进程、注册 ID、投屏和输入控制，不把普通 APK 描述为无需系统授权即可工作。
+
+来源：[Windows 服务](https://github.com/rustdesk/rustdesk/blob/1.5.0/src/platform/windows.rs)、[AndroidManifest](https://github.com/rustdesk/rustdesk/blob/1.5.0/flutter/android/app/src/main/AndroidManifest.xml)、[BootReceiver](https://github.com/rustdesk/rustdesk/blob/1.5.0/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/BootReceiver.kt)、[MainActivity](https://github.com/rustdesk/rustdesk/blob/1.5.0/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt)。
+
+## 4. 现有仓库的问题
+
+本次只读检查发现：
+
+1. 已有 build-custom-1.4.9.yml、build-custom-1.4.9-x64-android.yml、build-custom-1.4.9-x64-server-fix.yml。
+2. 多处 checkout 固定旧提交 6c578292e8ebbbec708b76986ba8c4bc7c509747，因此同步 master 不等于使用新源码构建。
+3. YAML 内嵌大段 Python 字符串及 Base64 补丁，升级后难以定位、审查和维护，应拆为明确配置及可审查脚本/补丁。
+4. 部分工作流标题、Windows/Android 版本与文件名不同，需统一实际来源和产物标识。
+5. 旧工作流包含服务器空值及 IPC 回退修复，迁移时要保留必要行为并验证，不能假定新默认配置自动涵盖。
+6. 旧 Android 流程主要构建 aarch64，需要新增先 armv7 的独立入口。
+7. 旧工作流还含 b.9394.cn 更新渠道和 root 授权逻辑，超出本次明确需求，不自动照搬；升级前先记录保留、移除或另行开发的决定。
+
+来源：[旧 Android/Windows 工作流](https://github.com/hacxer/rustdesk/blob/master/.github/workflows/build-custom-1.4.9-x64-android.yml)、[服务器回退修复工作流](https://github.com/hacxer/rustdesk/blob/master/.github/workflows/build-custom-1.4.9-x64-server-fix.yml)。
+
+## 5. 实施结构与构建流程
+
+拟定结构（均未实现）：
+
+- 本文：需求、问题和行为约定的入口。
+- config/custom-9394.json：公开服务器参数和普通默认值，不放私钥及口令。
+- 独立客户端配置模块：共享加载、首次密码初始化及必要旧配置迁移。
+- scripts/custom-9394/ 与 patches/custom-9394/：配置生成、显式补丁、版本清单及检查。
+- .github/workflows/custom-9394-build.yml：统一版本和平台选择，首轮只运行 armv7。
+- .github/workflows/custom-9394-update.yml：启用后检查上游并创建升级 PR。
+- docs/custom-9394/validation.md、changelog.md：验收与迭代记录。
+
+每次构建顺序：
+
+1. 解析 stable / master / 指定 tag 或 SHA，冻结真实 SHA。
+2. 递归检出对应子模块，以该版本官方 CI 的 Rust、Flutter、Java、NDK、vcpkg 组合为起点。
+3. 检查补丁前置条件，补丁不匹配立即失败，禁止静默跳过仍声称定制成功。
+4. 读取配置及 Secrets，生成定制内容，执行必要回归测试。
+5. 首先编译 armv7，仅产出 armv7-signed.apk；避免其他平台提前并发编译。
+6. zipalign、apksigner 签名及 verify --print-certs，核对 armeabi-v7a 原生库。
+7. 上传 APK、SHA256SUMS、build-manifest.json，进入设备验收。
+8. armv7 验收通过后，用相同源码和配置构建 aarch64-signed.apk、x86_64.exe。
+9. 记录验证结果并发布定制 Release，保留历史版本便于回滚。
+
+编译成功、静态校验通过、真实设备运行通过是不同状态。GitHub runner 不能证明 armv7 设备上的重启、投屏与控制；未实测时只能记录待验收。
+
+持续升级：稳定渠道检查正式 Release，测试渠道可跟进 master 指定提交。fork 不会因上游 push 自动同步并触发自身构建，需要显式定时检查或手动触发。升级先提交文档/变更摘要，再改代码和补丁，再运行构建。未来上游不兼容时应准确失败并修复，不承诺任何未来源码都无需适配。定时频率及自动发布策略在实施前写入本文；本次不创建调度。
+
+## 6. Android 签名与覆盖升级
+
+用户提供旧 Release v1.4.9-custom-9394 中的 rustdesk-9394.keystore 和 keystore-info.txt，按沿用现有签名处理。
+
+已核对 Release 元数据中的 keystore 文件 SHA-256：d88572222dbe472b4b191bd9734859e27bcd115f06a2b711eec193b4c29d0d91。该值是文件摘要，不是 APK 证书指纹。
+
+现有工作流引用四个 Secrets：ANDROID_KEYSTORE_BASE64、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD。本次尚未核对是否存在且可用；实施时优先复用，避免重复配置。只在 GitHub runner 临时还原证书，禁止上传为 artifact 或 Release 附件，不将其下载到用户本地作为构建前置步骤。
+
+必须比较旧 APK 和新 APK 的签名证书 SHA-256，并核对包名与 versionCode，才能标记支持覆盖升级；文件名相同不能代替验证。
+
+公开 Release 已列出证书材料，应视为已公开。是否清理历史附件或迁移新证书另行形成方案；本次不删除现有资产，不擅自换证书导致已装客户端无法覆盖升级。
+
+来源：[现有 Release](https://github.com/hacxer/rustdesk/releases/tag/v1.4.9-custom-9394)。
+
+## 7. 验收清单
+
+| 项目 | 验收标准 |
+| --- | --- |
+| 来源一致 | 清单中的真实源码、子模块、补丁 SHA 与构建实际使用值一致 |
+| armv7 优先 | 首轮仅编译 armv7，原生库为 armeabi-v7a，签名有效 |
+| 服务器 | 新装四项正确，服务后台注册和实际连接与界面一致 |
+| 旧配置 | 缺失/空白值迁移，非空自定义值保留，UI/IPC/服务一致 |
+| 远程修改 | 默认开关开启，已认证会话可按上游权限规则修改 |
+| 数字密码 | 首次及刷新均为 6 位数字，刷新规则正常 |
+| 固定密码 | 初次可认证，用户修改/清除后升级重启不恢复初始值 |
+| IP 直连 | 初始开启，网络可达时经认证连接成功 |
+| Windows 服务 | 安装后自动启动，重启无人登录场景可用 |
+| Android 开机 | 授权后分 OS 重启测试，分别记录进程、ID、投屏与输入 |
+| Android 覆盖升级 | 签名指纹一致、包名兼容、versionCode 增长、配置保留 |
+| 发布完整性 | 三类约定产物、校验和、无秘密清单及验收记录齐全 |
+
+尚未执行编译、签名和设备验收，尚未验证服务器/API 可用性。
+
+## 8. 问题迭代规则
+
+每次发现问题，先记录问题编号、平台/版本、期望与实际行为、复现及证据、需求调整、验收标准。文档提交后才改代码；随后关联代码提交、Actions run、产物摘要、实测及未通过项，不能仅凭编译成功关闭运行问题。
+
+| 问题 | 状态 |
+| --- | --- |
+| P001 工作流固定旧 SHA | 已分析，待开发 |
+| P002 配置和补丁分散在多个 YAML | 已分析，待集中整理 |
+| P003 服务器空值及服务/UI 一致性 | 已分析，待迁移及回归 |
+| P004 armv7 先构建 | 已纳入 R15，待实施 |
+| P005 Android 启动默认值与系统授权 | 已分析，待开发及实测 |
+| P006 签名复用与覆盖升级 | 已确认材料来源，待 Secrets/指纹核验 |
+
+## 9. 本次记录
+
+2026-10-18：整理用户第 1–6 条要求，核查上游稳定版、master、现有定制工作流及 Release 元数据；用户指定 hacxer/rustdesk 和旧签名材料。仅提交方案文档，待用户评审后进入代码及工作流开发。
