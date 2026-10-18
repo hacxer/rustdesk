@@ -65,7 +65,7 @@ class Bootstrap9394 extends WidgetsBindingObserver {
           return;
         }
       }
-      final autoStart = await bind.mainGetLocalOption(key: '9394-auto-start');
+      final autoStart = bind.mainGetLocalOption(key: '9394-auto-start');
       if (autoStart != 'N' && !gFFI.serverModel.isStart && !_attemptedMedia &&
           !await mainGetBoolOption(kOptionStopService)) {
         _attemptedMedia = true;
