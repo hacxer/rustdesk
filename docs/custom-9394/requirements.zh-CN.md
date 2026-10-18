@@ -253,3 +253,5 @@ RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍�
 2026-10-19 / P014：提交后的适配脚本回读审查发现 Python 字符串内的 core_main's 单引号未正确转义，会阻止源码准备。先记录本文，再修正该行，并在 Actions 中增加 py_compile 预检；尚未运行正式编译。
 
 2026-10-19 / 测试环境补充：用户授权使用已安装的雷电模拟器 5 和现有本地 ADB 测试，不安装新工具。已连接 127.0.0.1:5555，系统 Android 7.1.2 / API 25，报告 ABI 为 x86,armeabi-v7a,armeabi，约 3.46GiB 可见内存。用于 Android 7.1 安装、自动启动、系统授权及基本远控验证；因 ARM 兼容层、内存和固件与商米 T2 不同，不替代 T2 2GB 真机资源与稳定性验收。
+
+2026-10-19 / P015：首轮 Actions 39144255352 在 Analyze Android startup 阶段失败；bootstrap_9394.dart 对同步返回 String 的 mainGetLocalOption 使用 await，触发 await_only_futures。先记录本文，再移除该处多余 await；保留静态检查，验收要求该步骤零问题通过，然后继续 armv7 构建。日志：https://github.com/hacxer/rustdesk/actions/runs/39144255352/job/117724760487 。
