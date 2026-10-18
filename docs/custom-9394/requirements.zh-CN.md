@@ -257,3 +257,5 @@ RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍�
 2026-10-19 / P015：首轮 Actions 39144255352 在 Analyze Android startup 阶段失败；bootstrap_9394.dart 对同步返回 String 的 mainGetLocalOption 使用 await，触发 await_only_futures。先记录本文，再移除该处多余 await；保留静态检查，验收要求该步骤零问题通过，然后继续 armv7 构建。日志：https://github.com/hacxer/rustdesk/actions/runs/39144255352/job/117724760487 。
 
 2026-10-19 / 构建进展：Actions #2（39144947641，定制提交 32870ac8035083c357bac237f04ccfc34d294598）已通过 P015 修复后的 Flutter analyze、NDK/vcpkg 准备及 armv7 原生依赖编译，正在编译 Rust 核心。P014 的 py_compile 预检通过；尚无可供安装的 APK。验收明细统一记录于 [validation.md](validation.md)。
+
+2026-10-19 / P016：Actions #2（39144947641）已完成 armv7 Rust 与 APK 构建，apksigner 明确输出 V1=true、V2=true；但新版 build-tools 的证书行以 V3.0 Signer 开头，原脚本只识别 Signer #1，导致最终证书一致性检查失败，产物未上传。先记录本文，再统一 Python 解析证书 SHA-256：兼容两种标签，只接受唯一证书摘要，缺失/多证书或新旧摘要不同仍失败；保留签名校验，不降低检查。为后续失败修复保留非秘密编译缓存，避免无谓重复构建。验收要求重新构建并通过真实新旧证书、V1/V2、ABI 及模拟器安装检查。日志：https://github.com/hacxer/rustdesk/actions/runs/39144947641/job/117726792146 。
