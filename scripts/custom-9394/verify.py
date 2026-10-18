@@ -16,6 +16,17 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def certificate_digest(text):
+    # Android build-tools 37+ labels signers by scheme (for example V3.0 Signer).
+    matches = {value.lower() for value in re.findall(
+        r"(?m)^(?:Signer #\d+|V[\d.]+ Signer): certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$",
+        text,
+    )}
+    if len(matches) != 1:
+        raise SystemExit("Expected exactly one signing certificate SHA-256 digest")
+    return matches.pop()
+
+
 def git(*args):
     return subprocess.check_output(["git", "-C", "upstream", *args], text=True).strip()
 
@@ -50,7 +61,11 @@ elif sys.argv[1] == "apk":
     signatures = Path("dist/signature-verification.txt").read_text()
     assert "Verified using v1 scheme (JAR signing): true" in signatures
     assert "Verified using v2 scheme (APK Signature Scheme v2): true" in signatures
-    certificate = re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-f]+)", signatures).group(1)
+    certificate = certificate_digest(signatures)
+    previous_certificate = certificate_digest(
+        (Path(os.environ["RUNNER_TEMP"]) / "previous-cert.txt").read_text()
+    )
+    assert certificate == previous_certificate, "APK signing certificate changed"
     with zipfile.ZipFile(apk) as archive:
         libs = [name for name in archive.namelist() if name.startswith("lib/") and name.endswith(".so")]
         assert "lib/armeabi-v7a/librustdesk.so" in libs
