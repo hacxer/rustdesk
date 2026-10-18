@@ -10,7 +10,7 @@
 
 工作流在 GitHub runner 中检出该版本与子模块，严格匹配并应用本仓库的定制适配，然后编译。上游变化导致适配锚点或 Android 7.1 前置条件不匹配时会失败，必须先把问题、日志和验收标准加入需求文档，再改配置/适配脚本；不能静默跳过补丁。
 
-成功后下载 `armv7-signed-9394-运行编号` artifact ZIP，内含 `armv7-signed.apk`、`SHA256SUMS`、`build-manifest.json`、签名校验和 APK 信息。只有签名和 ABI 检查通过才会上传这个产物；失败时仅提供不含秘密的诊断清单。
+成功后下载 `armv7-signed-9394-运行编号` artifact ZIP，内含 `armv7-signed.apk`、`SHA256SUMS`、`build-manifest.json`、签名校验和 APK 信息。只有签名和 ABI 检查通过才会上传这个交付产物。名称含 `unverified-checkpoint` 的 artifact 仅用于 CI 故障诊断，未通过最终校验，不作为安装交付包；名称含 `diagnostics` 的 artifact 为非秘密检查报告。
 
 `build-manifest.json` 记录真实上游 SHA、递归子模块、定制提交、配置摘要、工具链、APK 摘要及证书指纹。所有运行状态以 Actions 实际结果为准。产物的商米 T2 验收默认标记 PENDING，不能因构建绿色就改成兼容通过。
 
@@ -23,3 +23,5 @@
 更新前先修改需求/问题记录及来源版本，再调整适配，先单独构建并验收 armv7；同一批次的其他平台必须使用相同的上游真实 SHA 和配置。定制适配保存在本仓库独立文件中，无需在本地安装 Rust、Flutter 或 Android 构建工具。
 
 当前只实施 armv7 入口。aarch64、Windows 和自动升级 PR 入口待首阶段验收后开发；没有启用定时任务，也没有自动发布未经设备验收的 Release。
+
+2026-10-19：按用户要求，APK 安装与雷电模拟器运行测试由用户手动完成；[验收清单](validation.md)包含首次授权、自动服务、认证与远控功能检查。本轮助手完成 GitHub 打包和静态校验后提供交付 artifact 链接。
