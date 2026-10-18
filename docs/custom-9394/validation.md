@@ -6,7 +6,7 @@
 
 - 上游：RustDesk 1.5.0，提交 fada664df7a294d1d1a9ca3e7cd3637069122f17；每次产物以 build-manifest.json 的实际值为准。
 - 首轮：[Actions #1](https://github.com/hacxer/rustdesk/actions/runs/39144255352)，定制提交 599d5e8d8b6dccff71c1547b5276c0c9179eb1cf。签名 Secrets / 既有 keystore SHA-256 预检、Python 编译、补丁匹配、锁定依赖和桥接生成通过。Flutter analyzer 报 await_only_futures，按需求 P015 先登记后修复；未产出 APK，未执行安装。
-- 第二轮：[Actions #2](https://github.com/hacxer/rustdesk/actions/runs/39144947641)，定制提交 32870ac8035083c357bac237f04ccfc34d294598。运行中，尚不能标记编译或签名通过。
+- 第二轮：[Actions #2](https://github.com/hacxer/rustdesk/actions/runs/39144947641)，定制提交 32870ac8035083c357bac237f04ccfc34d294598。已完成 armv7 Rust、APK 构建及 V1/V2 校验；P016 证书输出解析不兼容导致最终检查失败，未上传可安装产物。
 
 ## 当前测试设备
 
@@ -29,3 +29,9 @@
 - 四项服务器、六位数字密码、固定密码、IP 直连、开机选项的默认与用户修改保留。
 - 远控画面、输入、文件、双向剪贴板、断线重连和重启；逐项如实记录，不以开关状态代替端到端功能。
 - 商米 T2 真机资源、30 分钟会话及固件差异：待设备验收。
+
+## P016 修复后的构建
+
+- 第三轮 [Actions #3](https://github.com/hacxer/rustdesk/actions/runs/39146925164) 在前期主动取消，补齐旧证书输出中没有冒号的前缀差异；不作为交付构建。
+- 第四轮 [Actions #4](https://github.com/hacxer/rustdesk/actions/runs/39147055221)，定制提交 81038a0afa3b4714d3d5f92150878e710e4063f8。已通过 Python 预编译、补丁前置检查、桥接与 Flutter analyzer；构建进行中。
+- 已确认可用的现有 Windows 控制端版本为 1.4.9+67，待新 APK 安装后执行实际连接。设备 ID 和认证口令不写入公开验收文档。
