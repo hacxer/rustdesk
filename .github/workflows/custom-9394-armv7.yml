@@ -49,6 +49,7 @@ jobs:
           keytool -list -keystore "$RUNNER_TEMP/rustdesk-9394.keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS"
       - name: Prepare reviewed source
         run: |
+          python3 -m py_compile scripts/custom-9394/prepare.py scripts/custom-9394/verify.py
           python3 scripts/custom-9394/prepare.py upstream
           git -C upstream diff --check
           mkdir -p dist
