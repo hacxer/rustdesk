@@ -19,7 +19,7 @@ def sha256(path):
 def certificate_digest(text):
     # Android build-tools 37+ labels signers by scheme (for example V3.0 Signer).
     matches = {value.lower() for value in re.findall(
-        r"(?m)^(?:Signer #\d+|V[\d.]+ Signer): certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$",
+        r"(?m)^(?:Signer #\d+ certificate|V[\d.]+ Signer: certificate) SHA-256 digest: ([0-9a-fA-F]{64})\s*$",
         text,
     )}
     if len(matches) != 1:
