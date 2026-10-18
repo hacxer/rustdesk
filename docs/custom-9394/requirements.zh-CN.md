@@ -1,6 +1,6 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.1，2026-10-18（Asia/Shanghai）
+- 版本：0.2，2026-10-18（Asia/Shanghai）
 - 仓库：https://github.com/hacxer/rustdesk
 - 状态：方案阶段。本次只提交本文，产品代码和构建工作流尚未修改，尚未编译。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
@@ -25,6 +25,7 @@
 | R14 | 文档先于代码 | 每个问题先登记需求、复现和验收标准，再修改代码 |
 | R15 | armv7 优先 | 首先仅构建 armv7-signed.apk；通过签名、ABI、配置检查及设备验收后再构建 aarch64-signed.apk 和 x86_64.exe |
 | R16 | 沿用 Android 签名 | 使用用户提供的旧证书材料，核对旧 APK 签名指纹，保持兼容包名并提高 versionCode |
+| R17 | 商米 T2 兼容 | armv7-signed.apk 必须支持用户指定的商米 T2：Android 7.1、2GB RAM、16GB 存储；作为首批必测设备，未通过真机验收不标记支持 |
 
 “默认”是新安装或尚未明确设置时的初始值，不在每次启动时重置用户设置。保留非空自定义服务器和用户后来修改的开关。固定密码只初始化一次，用户修改或清除后，重启和升级不恢复初始值；若未来需要强制锁定，应先修改本文。
 
@@ -90,6 +91,16 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 
 来源：[Windows 服务](https://github.com/rustdesk/rustdesk/blob/1.5.0/src/platform/windows.rs)、[AndroidManifest](https://github.com/rustdesk/rustdesk/blob/1.5.0/flutter/android/app/src/main/AndroidManifest.xml)、[BootReceiver](https://github.com/rustdesk/rustdesk/blob/1.5.0/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/BootReceiver.kt)、[MainActivity](https://github.com/rustdesk/rustdesk/blob/1.5.0/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt)。
 
+### 3.4 商米 T2（Android 7.1、2GB + 16GB）兼容要求
+
+设备型号、系统及容量来自用户新增需求，尚未通过设备读取核实。首个 armv7-signed.apk 必须以该配置的商米 T2 为必测目标，不能用 arm64 构建或新系统模拟器结果代替。
+
+- 安装与加载：APK 包含 armeabi-v7a 原生库；minSdkVersion 不高于设备系统 API 级别。Flutter、Rust 原生库、NDK 目标级别和第三方依赖也必须兼容 Android 7.1，不能只降低 manifest 数值或重命名 APK。
+- 功能：在该设备上验证首次安装/启动、四项服务器配置、ID 注册、固定/临时密码认证、IP 直连、远程画面与输入控制。按系统要求完成无障碍、屏幕捕获及开机启动相关授权。
+- 资源：针对 2GB RAM、16GB 总存储控制内存、安装体积与日志增长；总存储不代表当前可用空间。记录 APK 大小、安装后占用、运行内存及可用空间，避免默认启用高负载画质配置；编码能力以实机检测为准，提供可用的兼容路径。
+- 稳定性：完成至少 30 分钟远程会话，并测试断线重连、后台恢复及授权后重启；验收期间不得出现崩溃、ANR 或因内存不足退出，发现问题先登记本文再修复。
+- 验收证据：记录 T2 实际系统版本/固件、支持的 ABI、剩余存储、APK SHA-256、签名指纹和运行结果。若没有真机结果，状态保持“待商米 T2 验收”，不能以编译成功宣称兼容。
+
 ## 4. 现有仓库的问题
 
 本次只读检查发现：
@@ -152,6 +163,7 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 | --- | --- |
 | 来源一致 | 清单中的真实源码、子模块、补丁 SHA 与构建实际使用值一致 |
 | armv7 优先 | 首轮仅编译 armv7，原生库为 armeabi-v7a，签名有效 |
+| 商米 T2 | Android 7.1、2GB RAM、16GB 存储实机安装与远控正常；按 3.4 节完成资源、30 分钟会话及重启验收 |
 | 服务器 | 新装四项正确，服务后台注册和实际连接与界面一致 |
 | 旧配置 | 缺失/空白值迁移，非空自定义值保留，UI/IPC/服务一致 |
 | 远程修改 | 默认开关开启，已认证会话可按上游权限规则修改 |
@@ -177,7 +189,10 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 | P004 armv7 先构建 | 已纳入 R15，待实施 |
 | P005 Android 启动默认值与系统授权 | 已分析，待开发及实测 |
 | P006 签名复用与覆盖升级 | 已确认材料来源，待 Secrets/指纹核验 |
+| P007 商米 T2 Android 7.1 兼容 | 已纳入 R17，待依赖兼容核查、armv7 构建及真机验收 |
 
 ## 9. 本次记录
 
 2026-10-18：整理用户第 1–6 条要求，核查上游稳定版、master、现有定制工作流及 Release 元数据；用户指定 hacxer/rustdesk 和旧签名材料。仅提交方案文档，待用户评审后进入代码及工作流开发。
+
+2026-10-18（v0.2）：按用户新增要求，将商米 T2（Android 7.1、2GB RAM、16GB 存储）列为 armv7-signed.apk 的必测目标，增加 R17、3.4 节、验收项及 P007；本次仅修订需求文档，未修改代码、未构建、未完成真机测试。
