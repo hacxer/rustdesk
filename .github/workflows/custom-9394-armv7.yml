@@ -73,6 +73,7 @@ jobs:
         with:
           workspaces: upstream -> target
           prefix-key: custom9394-armv7-rust175
+          cache-on-failure: true
       - name: Flutter for bridge generation
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
@@ -137,6 +138,17 @@ jobs:
           export PATH="$JAVA_HOME/bin:$PATH"
           sed -i 's/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/' android/gradle.properties
           flutter build apk --release --target-platform android-arm --split-per-abi --build-name "$BUILD_NAME" --build-number "$((15010000 + GITHUB_RUN_NUMBER))"
+      - name: Preserve unverified build checkpoint
+        run: |
+          mkdir -p checkpoint
+          cp upstream/flutter/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk checkpoint/unverified-armv7.apk
+          cp dist/build-manifest.json upstream/custom-9394-changes.json checkpoint/
+      - name: Upload unverified checkpoint for CI diagnosis only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: armv7-unverified-checkpoint-${{ github.run_id }}
+          path: checkpoint/
+          retention-days: 7
       - name: Sign V1 and V2 with original certificate
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -152,12 +164,9 @@ jobs:
           grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' dist/signature-verification.txt
           "$BUILD_TOOLS/zipalign" -c -p 4 dist/armv7-signed.apk
           curl --fail --location --retry 3 'https://github.com/hacxer/rustdesk/releases/download/v1.4.9-custom-9394/rustdesk-1.4.9-aarch64-signed-9394.apk' --output "$RUNNER_TEMP/previous.apk"
-          "$BUILD_TOOLS/apksigner" verify --print-certs "$RUNNER_TEMP/previous.apk" > "$RUNNER_TEMP/previous-cert.txt"
-          OLD_CERT=$(awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}' "$RUNNER_TEMP/previous-cert.txt")
-          NEW_CERT=$(awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}' dist/signature-verification.txt)
-          test -n "$OLD_CERT"
-          test "$OLD_CERT" = "$NEW_CERT"
-          "$BUILD_TOOLS/aapt" dump badging dist/armv7-signed.apk > dist/apk-badging.txt
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/previous.apk" 2>&1 | tee "$RUNNER_TEMP/previous-cert.txt"
+          cp "$RUNNER_TEMP/previous-cert.txt" dist/previous-cert.txt
+          "$BUILD_TOOLS/aapt" dump badging dist/armv7-signed.apk 2>&1 | tee dist/apk-badging.txt
           python3 scripts/custom-9394/verify.py apk
           echo '### Signed armv7 verified; SUNMI T2 device validation PENDING' >> "$GITHUB_STEP_SUMMARY"
           cat dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
@@ -174,6 +183,7 @@ jobs:
           name: armv7-diagnostics-${{ github.run_number }}
           path: |
             dist/build-manifest.json
+            dist/*.txt
             upstream/custom-9394-changes.json
           if-no-files-found: ignore
       - name: Remove temporary signing files
