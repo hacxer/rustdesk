@@ -38,7 +38,7 @@ shutil.copyfile(PROFILE / "config/custom-9394.json", ROOT / "config/custom-9394.
 copy_source("custom_9394.rs", "src/custom_9394.rs")
 copy_source("bootstrap_9394.dart", "flutter/lib/mobile/bootstrap_9394.dart")
 replace_once("src/lib.rs", "mod custom_server;", '#[cfg(target_os = "android")]\nmod custom_9394;\nmod custom_server;')
-replace_once("src/flutter_ffi.rs", "    // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c", '    #[cfg(target_os = "android")]\n    crate::custom_9394::initialize();\n    // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c')
+replace_once("src/flutter_ffi.rs", "    // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c", "    #[cfg(target_os = \"android\")]\n    crate::custom_9394::initialize();\n    // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c")
 replace_once("flutter/lib/mobile/pages/home_page.dart", "import '../../models/state_model.dart';", "import '../../models/state_model.dart';\nimport '../bootstrap_9394.dart';")
 replace_once("flutter/lib/mobile/pages/home_page.dart", "    super.initState();\n    initPages();", "    super.initState();\n    initPages();\n    WidgetsBinding.instance.addPostFrameCallback((_) => Bootstrap9394.start());")
 replace_once("flutter/lib/models/server_model.dart", "    // Initial keyboard status is off on mobile\n    if (isMobile) {", "    // Android follows the actual accessibility service state.\n    if (isIOS) {")
