@@ -1,0 +1,15 @@
+{
+  "custom-rendezvous-server": "rustdesk.9394.cn",
+  "relay-server": "rustdesk.9394.cn",
+  "api-server": "http://rustdesk.9394.cn:21114",
+  "key": "6SM+NeAH25BBbI3wLINUrc56GJsImMLWvRTIsQL6fYQ=",
+  "allow-remote-config-modification": "Y",
+  "allow-numeric-one-time-password": "Y",
+  "temporary-password-length": "6",
+  "verification-method": "use-both-passwords",
+  "direct-server": "Y",
+  "stop-service": "N",
+  "enable-keyboard": "Y",
+  "enable-file-transfer": "Y",
+  "enable-clipboard": "Y"
+}
