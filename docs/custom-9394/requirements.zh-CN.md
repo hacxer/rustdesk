@@ -1,6 +1,6 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.2，2026-10-18（Asia/Shanghai）
+- 版本：0.3，2026-10-19（Asia/Shanghai）
 - 仓库：https://github.com/hacxer/rustdesk
 - 状态：方案阶段。本次只提交本文，产品代码和构建工作流尚未修改，尚未编译。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
@@ -26,6 +26,10 @@
 | R15 | armv7 优先 | 首先仅构建 armv7-signed.apk；通过签名、ABI、配置检查及设备验收后再构建 aarch64-signed.apk 和 x86_64.exe |
 | R16 | 沿用 Android 签名 | 使用用户提供的旧证书材料，核对旧 APK 签名指纹，保持兼容包名并提高 versionCode |
 | R17 | 商米 T2 兼容 | armv7-signed.apk 必须支持用户指定的商米 T2：Android 7.1、2GB RAM、16GB 存储；作为首批必测设备，未通过真机验收不标记支持 |
+| R18 | Android 打开即启动服务 | 正常打开 APP 后默认自动执行启动服务流程；所需授权齐备时自动运行，缺少授权时发起系统请求或引导，完成后自动继续 |
+| R19 | Android 默认功能权限 | 默认启用屏幕录制、输入控制、传输文件和允许同步剪贴板；分别检查应用开关、系统授权及实际功能，不能只把开关显示为开启 |
+| R20 | armv7 APK 必带 V1 签名 | armv7-signed.apk 为 armeabi-v7a（32 位），必须包含并验证通过 V1（JAR）签名，兼容 Android 7.1；同时保留 V2 签名 |
+| R21 | RustDesk Input 无障碍 | 已由用户启用时自动连接并使用 RustDesk Input；未开启时主动引导用户进入系统无障碍设置，开启并返回后自动复查与恢复服务 |
 
 “默认”是新安装或尚未明确设置时的初始值，不在每次启动时重置用户设置。保留非空自定义服务器和用户后来修改的开关。固定密码只初始化一次，用户修改或清除后，重启和升级不恢复初始值；若未来需要强制锁定，应先修改本文。
 
@@ -101,6 +105,34 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 - 稳定性：完成至少 30 分钟远程会话，并测试断线重连、后台恢复及授权后重启；验收期间不得出现崩溃、ANR 或因内存不足退出，发现问题先登记本文再修复。
 - 验收证据：记录 T2 实际系统版本/固件、支持的 ABI、剩余存储、APK SHA-256、签名指纹和运行结果。若没有真机结果，状态保持“待商米 T2 验收”，不能以编译成功宣称兼容。
 
+### 3.5 Android 打开即启动与权限引导
+
+按用户 2026-10-19 的新增要求，正常打开 APP 后默认自动尝试启动服务，不再要求用户先点击“启动服务”按钮。先检查实际权限状态；已授权则自动继续，未授权则按顺序发起必要系统请求/引导，用户完成并返回 APP 后自动复查和继续启动。初始化与恢复应避免并发启动、重复弹窗和请求循环；用户拒绝或取消时显示缺失项及重试入口，不能显示为已授权或服务已就绪。本次会话主动停止服务后不立即反复拉起；用户显式关闭自动启动或功能开关的状态仍按文档默认值约定保留。
+
+| 功能 | 默认目标与行为 | 实际生效条件 |
+| --- | --- | --- |
+| 启动服务 | APP 打开后自动启动，授权完成后自动续接 | 后台服务真实运行，并能注册 ID；服务状态和投屏就绪状态分别显示 |
+| 屏幕录制 | 默认请求用于远程画面共享的屏幕捕获权限 | 普通 APP 使用系统 MediaProjection 授权；需要用户确认时自动弹出系统界面，收到有效结果后启用，不伪造或绕过授权；不是默认保存本地录像 |
+| 输入控制 | 应用内允许输入，自动检查 RustDesk Input | 无障碍服务已在系统启用且实际连接；未启用则展示用途、引导进入该服务设置，用户开启并返回后复查；若设备不能直达具体服务页，则进入无障碍列表并明确告知服务名称 |
+| 传输文件 | 应用内允许文件传输，自动检查对应访问能力 | 按系统版本及上游实际存储实现申请必要权限或目录访问；在允许范围实测上传、下载，不能把应用内开关等同于系统全盘访问权限 |
+| 允许同步剪贴板 | 应用内同步开关默认开启 | 按系统版本检查实际剪贴板读取/写入能力和必要服务条件，验证控制端与 Android 端的双向同步，以平台支持的数据类型为准 |
+
+RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍服务；未启用时由用户在系统界面开启。普通 APP 不能仅凭一个默认选项静默授予屏幕捕获或开启无障碍服务。若未来需要使用商米提供的受管/系统授权能力，须先核实实际固件与可用接口，并先更新需求；本次不假设设备已具备这些权限。
+
+本次截图只作为上述功能名称和界面位置的参考；不将截图中的音频录制状态或固定密码提示作为新增需求。
+
+来源：[Android 屏幕捕获授权](https://developer.android.com/reference/android/media/projection/MediaProjectionManager)、[Android 无障碍服务](https://developer.android.com/guide/topics/ui/accessibility/service)。
+
+### 3.6 armeabi-v7a 32 位 APK 与 V1 签名
+
+首个 armv7-signed.apk 必须包含 armeabi-v7a 的 32 位原生库，并在商米 T2 Android 7.1 上验证安装和运行；不能用 aarch64 APK 重命名代替。Android 7.1 兼容仍包括 SDK、Flutter、原生依赖及运行功能，不以签名通过代替。
+
+签名阶段显式设置 --v1-signing-enabled true，同时启用 --v2-signing-enabled true，沿用已约定的证书。不能依赖工具默认推断是否附加 V1。V1 为用户明确要求，并不表示 Android 7.1 只支持 V1。
+
+签名后必须执行 apksigner verify --verbose --print-certs，并确认日志中 Verified using v1 scheme (JAR signing): true，整体校验成功；同时核对 V2 结果和新旧证书指纹。将 V1/V2 验证结果、ABI、APK SHA-256 记入构建清单和验收记录。先 zipalign 再签名，签名后不得再改写 APK；缺失 V1 或验证失败时阻止发布。
+
+来源：[Android apksigner 的 V1/V2 签名及验证参数](https://developer.android.com/tools/apksigner)。
+
 ## 4. 现有仓库的问题
 
 本次只读检查发现：
@@ -134,7 +166,7 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 3. 检查补丁前置条件，补丁不匹配立即失败，禁止静默跳过仍声称定制成功。
 4. 读取配置及 Secrets，生成定制内容，执行必要回归测试。
 5. 首先编译 armv7，仅产出 armv7-signed.apk；避免其他平台提前并发编译。
-6. zipalign、apksigner 签名及 verify --print-certs，核对 armeabi-v7a 原生库。
+6. zipalign 后使用 apksigner 显式启用 V1 + V2 签名；verify --verbose --print-certs 必须确认 V1 为 true，核对 armeabi-v7a 32 位原生库及证书指纹，失败即停止发布。
 7. 上传 APK、SHA256SUMS、build-manifest.json，进入设备验收。
 8. armv7 验收通过后，用相同源码和配置构建 aarch64-signed.apk、x86_64.exe。
 9. 记录验证结果并发布定制 Release，保留历史版本便于回滚。
@@ -162,7 +194,11 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 | 项目 | 验收标准 |
 | --- | --- |
 | 来源一致 | 清单中的真实源码、子模块、补丁 SHA 与构建实际使用值一致 |
-| armv7 优先 | 首轮仅编译 armv7，原生库为 armeabi-v7a，签名有效 |
+| armv7 优先 | 首轮仅编译 armv7，原生库为 armeabi-v7a（32 位），V1 + V2 签名有效 |
+| V1 签名 | 显式启用 V1，apksigner 校验确认 V1 为 true；Android 7.1 实机安装/覆盖升级通过 |
+| 打开 APP 自动服务 | 已授权时无需点击启动按钮即运行；首次授权完成返回后自动继续，拒绝时准确提示且不循环弹窗 |
+| 四项权限功能 | 屏幕共享、输入控制、传输文件、双向剪贴板分别实测；应用开关和真实授权状态一致 |
+| RustDesk Input | 已开启自动使用，未开启可引导到设置；用户开启返回后自动检测，关闭后状态及时更新 |
 | 商米 T2 | Android 7.1、2GB RAM、16GB 存储实机安装与远控正常；按 3.4 节完成资源、30 分钟会话及重启验收 |
 | 服务器 | 新装四项正确，服务后台注册和实际连接与界面一致 |
 | 旧配置 | 缺失/空白值迁移，非空自定义值保留，UI/IPC/服务一致 |
@@ -190,9 +226,14 @@ Android：AndroidManifest.xml 已有 RECEIVE_BOOT_COMPLETED 和 BootReceiver；B
 | P005 Android 启动默认值与系统授权 | 已分析，待开发及实测 |
 | P006 签名复用与覆盖升级 | 已确认材料来源，待 Secrets/指纹核验 |
 | P007 商米 T2 Android 7.1 兼容 | 已纳入 R17，待依赖兼容核查、armv7 构建及真机验收 |
+| P008 Android 打开 APP 自动服务及四项权限 | 已纳入 R18/R19，待开发及真实授权流程验收 |
+| P009 armv7 APK 强制 V1 签名 | 已纳入 R20，待签名配置、校验及 Android 7.1 安装验证 |
+| P010 RustDesk Input 自动检测及未启用引导 | 已纳入 R21，待开发及无障碍状态验收 |
 
 ## 9. 本次记录
 
 2026-10-18：整理用户第 1–6 条要求，核查上游稳定版、master、现有定制工作流及 Release 元数据；用户指定 hacxer/rustdesk 和旧签名材料。仅提交方案文档，待用户评审后进入代码及工作流开发。
 
 2026-10-18（v0.2）：按用户新增要求，将商米 T2（Android 7.1、2GB RAM、16GB 存储）列为 armv7-signed.apk 的必测目标，增加 R17、3.4 节、验收项及 P007；本次仅修订需求文档，未修改代码、未构建、未完成真机测试。
+
+2026-10-19（v0.3）：加入用户新增的 Android 打开 APP 自动启动服务、屏幕录制/输入控制/传输文件/剪贴板默认启用及系统授权引导、armeabi-v7a（32 位）APK 强制 V1 签名、RustDesk Input 自动检测与未开启引导；新增 R18–R21、3.5–3.6 节、验收项及 P008–P010。仅更新需求文档，尚未实现或编译。
