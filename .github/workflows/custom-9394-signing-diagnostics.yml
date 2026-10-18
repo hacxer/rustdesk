@@ -1,0 +1,36 @@
+name: 9394 signing diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Inspect previous public APK without private key
+        run: |
+          set -euo pipefail
+          mkdir reports
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          echo "Build tools: $BUILD_TOOLS"
+          curl --fail --location --retry 3 'https://github.com/hacxer/rustdesk/releases/download/v1.4.9-custom-9394/rustdesk-1.4.9-aarch64-signed-9394.apk' --output "$RUNNER_TEMP/previous.apk"
+          set +e
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/previous.apk" > reports/previous-default.txt 2>&1
+          DEFAULT_STATUS=$?
+          "$BUILD_TOOLS/apksigner" verify --min-sdk-version 25 --max-sdk-version 25 --verbose --print-certs "$RUNNER_TEMP/previous.apk" > reports/previous-api25.txt 2>&1
+          API25_STATUS=$?
+          "$BUILD_TOOLS/aapt" dump badging "$RUNNER_TEMP/previous.apk" > reports/previous-badging.txt 2>&1
+          AAPT_STATUS=$?
+          set -e
+          printf 'default_verify=%s\napi25_verify=%s\naapt_badging=%s\n' "$DEFAULT_STATUS" "$API25_STATUS" "$AAPT_STATUS" | tee reports/status.txt
+          cat reports/previous-default.txt
+          cat reports/previous-api25.txt
+          head -20 reports/previous-badging.txt
+          cat reports/status.txt >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: signing-public-diagnostics
+          path: reports/
+          retention-days: 7
