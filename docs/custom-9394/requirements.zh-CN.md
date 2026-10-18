@@ -149,7 +149,7 @@ RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍�
 
 ## 5. 实施结构与构建流程
 
-拟定结构（均未实现）：
+实施结构（首阶段已提交公开配置、Android 初始化模块、源码适配脚本、armv7 专用 Actions 及验收记录；其他平台与升级入口待后续阶段）：
 
 - 本文：需求、问题和行为约定的入口。
 - config/custom-9394.json：公开服务器参数和普通默认值，不放私钥及口令。
@@ -181,7 +181,7 @@ RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍�
 
 已核对 Release 元数据中的 keystore 文件 SHA-256：d88572222dbe472b4b191bd9734859e27bcd115f06a2b711eec193b4c29d0d91。该值是文件摘要，不是 APK 证书指纹。
 
-现有工作流引用四个 Secrets：ANDROID_KEYSTORE_BASE64、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD。本次尚未核对是否存在且可用；实施时优先复用，避免重复配置。只在 GitHub runner 临时还原证书，禁止上传为 artifact 或 Release 附件，不将其下载到用户本地作为构建前置步骤。
+现有工作流引用四个 Secrets：ANDROID_KEYSTORE_BASE64、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD。2026-10-19 已在首轮 Actions 确认四项 Secrets 可用，解码后的旧 keystore SHA-256 与约定一致；最终 APK 证书对比仍待签名阶段。只在 GitHub runner 临时还原证书，禁止上传为 artifact 或 Release 附件，不将其下载到用户本地作为构建前置步骤。
 
 必须比较旧 APK 和新 APK 的签名证书 SHA-256，并核对包名与 versionCode，才能标记支持覆盖升级；文件名相同不能代替验证。
 
@@ -246,7 +246,7 @@ RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍�
 | --- | --- | --- |
 | P011 上游输入控制初始化覆盖默认值 | ServerModel 构造时对移动端无条件写 enable-keyboard=N；应改为从实际无障碍状态同步，已授权输入不会被每次打开重置，未授权引导开启 | 已记录，待修复 |
 | P012 启动意愿与权限状态混淆 | 设置页会因权限缺失把开机启动写回 false；应保留用户启动意愿，另外提示并引导补齐悬浮窗/电池优化权限 | 已记录，待修复 |
-| P013 构建预置密码与旧证书 | 开始编译前检查所需 Secrets，仅用既有证书；缺少时停止并准确提示，不退回临时签名或公开明文密码 | 待预检 |
+| P013 构建预置密码与旧证书 | 开始编译前检查所需 Secrets，仅用既有证书；缺少时停止并准确提示，不退回临时签名或公开明文密码 | Actions #1/#2 Secrets 与 keystore 预检通过；APK 证书待最终核对 |
 
 固定密码初始化先检查设备已有密码，首次初始化成功后持久化标记；后续主动修改或清除不重置。首阶段只在 Android 初始化接入配置，Windows 服务上下文的验证留待后续平台阶段。
 
@@ -255,3 +255,5 @@ RustDesk Input 已被用户启用时，APP 自动使用系统绑定的无障碍�
 2026-10-19 / 测试环境补充：用户授权使用已安装的雷电模拟器 5 和现有本地 ADB 测试，不安装新工具。已连接 127.0.0.1:5555，系统 Android 7.1.2 / API 25，报告 ABI 为 x86,armeabi-v7a,armeabi，约 3.46GiB 可见内存。用于 Android 7.1 安装、自动启动、系统授权及基本远控验证；因 ARM 兼容层、内存和固件与商米 T2 不同，不替代 T2 2GB 真机资源与稳定性验收。
 
 2026-10-19 / P015：首轮 Actions 39144255352 在 Analyze Android startup 阶段失败；bootstrap_9394.dart 对同步返回 String 的 mainGetLocalOption 使用 await，触发 await_only_futures。先记录本文，再移除该处多余 await；保留静态检查，验收要求该步骤零问题通过，然后继续 armv7 构建。日志：https://github.com/hacxer/rustdesk/actions/runs/39144255352/job/117724760487 。
+
+2026-10-19 / 构建进展：Actions #2（39144947641，定制提交 32870ac8035083c357bac237f04ccfc34d294598）已通过 P015 修复后的 Flutter analyze、NDK/vcpkg 准备及 armv7 原生依赖编译，正在编译 Rust 核心。P014 的 py_compile 预检通过；尚无可供安装的 APK。验收明细统一记录于 [validation.md](validation.md)。
