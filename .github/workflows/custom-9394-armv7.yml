@@ -112,7 +112,16 @@ jobs:
         working-directory: upstream
         run: |
           FLUTTER_ROOT=$(dirname "$(dirname "$(command -v flutter)")")
-          git -C "$FLUTTER_ROOT" apply "$GITHUB_WORKSPACE/upstream/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          SDK_PATCH="$GITHUB_WORKSPACE/upstream/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          if git -C "$FLUTTER_ROOT" apply --check "$SDK_PATCH"; then
+            git -C "$FLUTTER_ROOT" apply "$SDK_PATCH"
+            echo 'Flutter SDK patch applied'
+          elif git -C "$FLUTTER_ROOT" apply --reverse --check "$SDK_PATCH"; then
+            echo 'Flutter SDK patch already present; reverse check passed'
+          else
+            echo '::error::Flutter SDK patch matches neither clean nor patched state'
+            exit 1
+          fi
           cd flutter
           flutter pub get
           dart format lib/mobile/bootstrap_9394.dart
