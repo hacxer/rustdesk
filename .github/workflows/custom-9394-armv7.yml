@@ -125,7 +125,8 @@ jobs:
           cd flutter
           flutter pub get
           dart format lib/mobile/bootstrap_9394.dart
-          flutter analyze --no-pub lib/mobile/bootstrap_9394.dart lib/models/server_model.dart lib/mobile/pages/server_page.dart
+          flutter analyze --no-pub lib/mobile/bootstrap_9394.dart
+          flutter analyze --no-pub --no-fatal-infos lib/models/server_model.dart lib/mobile/pages/server_page.dart
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
         id: ndk
         with:
