@@ -437,7 +437,7 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 
 用户明确授权继续按相同配置编译aarch64-signed.apk、x86_64.exe，并上传现有正式版v1.5.0-9394-build9；先更新需求，全程GitHub。此授权允许在T2真机验收尚未完成时继续其他平台构建，但不得把待验收状态写成已通过。
 
-- R43 Android ARM64：固定上游fada664df7a294d1d1a9ca3e7cd3637069122f17及hbb_common229b904508364c8997aad0fb5af57effac859f60。使用build9定制来源ece437c54f2a22da2e212b19ca2f84e8d45899fb的config/custom-9394.json、Android适配和初始化模块；公开配置摘要必须与build9相同。仅切换arm64-v8a原生ABI与64位ELF检查，保持版本1.5.0.9394/versionCode15011009、原证书和V1+V2；不能用ARM32包改名代替。Android系统授权仍按安装人员交付前配置与真实授权检查执行。
+- R43 Android ARM64：固定上游fada664df7a294d1d1a9ca3e7cd3637069122f17及hbb_common229b904508364c8997aad0fb5af57effac859f60。使用build9定制来源ece437c54f2a22da2e212b19ca2f84e8d45899fb的config/custom-9394.json、Android适配和初始化模块；公开配置摘要必须与build9相同。仅切换arm64-v8a原生ABI与64位ELF检查，保持versionName1.5.0.9394、原证书和V1+V2；versionCode接受Flutter按ABI增加的偏移，ARM64实际15013009，高于原ARM32的15011009；不能用ARM32包改名代替。Android系统授权仍按安装人员交付前配置与真实授权检查执行。
 - R44 Windows x64：同一上游SHA及公开配置文件，沿用相同初始化模块及Secret注入固定密码，新增明确Windows入口适配：核心入口在启动服务前加载配置，Flutter DLL初始化也加载默认值；服务进程与普通用户分别使用正确上下文，保留既有非空自定义值、用户密码与后续选择。Windows临时密码按相同需求只手动刷新，错误密码限流/封禁不变。沿用上游安装与自动服务，便携运行不能承诺自动安装或开机运行。发布Flutter完整自解压x64 EXE，不能只上传缺DLL/资源的runner。未提供Windows代码签名证书，明确标注Authenticode未签名，不冒用上游签名。
 - R45 追加发布：原正式版标签与armv7及已有附件保持不变；两个新包分别附带独立构建清单、SHA256和平台校验报告。记录build9基准profile及新增平台适配提交，公开配置及共用模块摘要核对，不能将扩展提交误写成原build9全部源码。上传前检查Release身份及原armv7摘要，不覆盖同名不同内容附件，保留Latest和正式状态。
 
@@ -454,3 +454,10 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 首轮Windows任务118154864937在准备阶段触发baseline/config/custom-9394.json摘要断言；共享桥接已成功生成，ARM64构建继续。此前仅设置core.autocrlf=false仍不足以保证工作区字节。修复为在GitHub Windows runner明确UTF-8与LF设置，并从固定baseline Git对象以二进制方式恢复公开配置及共用模块文件，再验证原固定摘要；不能放松摘要或改服务器参数。源码差异检查允许平台CRLF行尾，但继续检查其他空白问题。
 
 为避免重编译已通过的桥接及ARM64，允许手动指定同仓库原构建run复用其verified ARM64 artifact，Windows独立重试。发布必须分别记录每个平台真实source_run、extension SHA，并与相应workflow run的head_sha及既定工作流路径核对；原run可能因另一平台失败而整体失败，不能因此把已验证artifact改记为新run构建。仍要求两包来源、配置、签名/ABI及摘要校验通过，原正式版附件不变。状态接口出现明显滞后时结合完整job日志与artifact证据，不能只据queued字样判定尚未执行。
+
+
+### P046 ARM64实际版本与发布辅助文件
+
+2026-10-20 00:23：原ARM64任务已上传verified-extra-aarch64-39279619028，V1/V2及原证书通过，原生库arm64-v8a/ELF64验证通过；实际APK为versionName1.5.0.9394、versionCode15013009、minSdk22、target36。此前需求自行约定15011009未计Flutter分ABI偏移，本轮采用实际上游版本编码，版本更高可覆盖已有包，不为修正文字重新编译或重新签名；发行说明须从APK报告读取实际值，不能继续硬编码旧代码。
+
+ARM64 artifact上传6个文件，比五项发布正文多一个签名辅助文件。追加发布采用严格正文白名单；允许仅附带aarch64-signed.apk.idsig作为不上传的可选辅助文件，其他未知文件仍拦截。先在GitHub列出实际下载文件名并复核，再上传。为复用已完成的两平台构建，新增独立追加发布入口，分别指定原ARM64/Windows来源run并验证各自真实head_sha；只重跑发布核验，不重编译。原二进制与原正式版附件均保持不变，来源与设备待验收状态继续准确记录。
