@@ -119,3 +119,8 @@ v0.5新增必测：覆盖安装时UDP与UDP打洞开；此后手动关闭再重�
 - [Actions #9](https://github.com/hacxer/rustdesk/actions/runs/39234351129) 已启动；冻结profile=ece437c54f2a22da2e212b19ca2f84e8d45899fb，上游指定1.5.0。尚未完成最终编译/签名校验，无新APK交付。
 - 17:58用户手动开启桥接并重启。全路由表及Connectivity均缺IPv4默认路由；只有LAN IPv4直连路由和IPv6默认路由。LAN网关可ping，外部IPv4立即NetworkUnreachable；RustDesk的注册、API与TCP回退也os error101。P038已定位为模拟器桥接网关配置，等待用户修正静态/保留地址或DHCP后复读；没有在产品中硬编码LAN路由。
 - 图中“不再显示”属于Android系统录屏确认，普通APK不能设置默认勾选；用户首次手动勾选及确认是否被保存由固件决定。保留必要系统确认与有效会话复用，不标记预勾选已实现。
+
+
+### P038 桥接恢复复查（18:07–18:08）
+
+用户已自行设置静态IP、网关并重启；ADB确认LAN /24及有效IPv4默认路由，外部IPv4可达。18:07:28收到指定服务器21116/21115 NAT及mediator响应（18.645ms），18:07:31 sysinfo updated；18:08:08指定中继会话Connection opened，随后视频服务启动。本次“桥接无法接入”因缺IPv4网关导致，网关修正后注册/API/中继会话恢复验证通过；此结论针对仍在运行的build8，不冒称未来build9已真机通过。TUN默认直连P034与30分钟稳定性/T2验收仍开放。
