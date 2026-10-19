@@ -1,5 +1,7 @@
 # RustDesk 9394 GitHub 构建入口
 
+**正式版已发布（2026-10-19）：[v1.5.0-9394-build9 / Latest](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。** [直接下载armv7-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/armv7-signed.apk)，无需解压；校验摘要、manifest及签名报告见Release附件。APK与原build9完全一致，V1/V2及原证书校验通过。安装人员按本文交付前统一配置；商米T2真机和30分钟稳定性仍待验收。下方Actions ZIP为原构建归档入口。
+
 - [需求与问题记录](requirements.zh-CN.md)
 - [构建及设备验收](validation.md)
 - [armv7 Actions](https://github.com/hacxer/rustdesk/actions/workflows/custom-9394-armv7.yml)
