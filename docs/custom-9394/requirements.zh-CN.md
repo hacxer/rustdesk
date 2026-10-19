@@ -1,8 +1,8 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.7，2026-10-19（Asia/Shanghai）
+- 版本：0.7，2026-10-20（Asia/Shanghai；新增平台完成）
 - 仓库：https://github.com/hacxer/rustdesk
-- 状态：v0.7正在扩展ARM64与Windows x64，使用原build9上游和配置，追加现有正式版；原ARM32包不变。v0.6安装人员预配置方案已确认，商米T2真机验收仍待完成。
+- 状态：v0.7 ARM64与Windows x64已校验并追加至原正式版，使用原build9上游与公开配置；ARM32原包不变。安装人员预配置方案不变，T2及新增平台完整设备验收仍待完成。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
 
 ## 1. 需求清单
@@ -461,3 +461,17 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 2026-10-20 00:23：原ARM64任务已上传verified-extra-aarch64-39279619028，V1/V2及原证书通过，原生库arm64-v8a/ELF64验证通过；实际APK为versionName1.5.0.9394、versionCode15013009、minSdk22、target36。此前需求自行约定15011009未计Flutter分ABI偏移，本轮采用实际上游版本编码，版本更高可覆盖已有包，不为修正文字重新编译或重新签名；发行说明须从APK报告读取实际值，不能继续硬编码旧代码。
 
 ARM64 artifact上传6个文件，比五项发布正文多一个签名辅助文件。追加发布采用严格正文白名单；允许仅附带aarch64-signed.apk.idsig作为不上传的可选辅助文件，其他未知文件仍拦截。先在GitHub列出实际下载文件名并复核，再上传。为复用已完成的两平台构建，新增独立追加发布入口，分别指定原ARM64/Windows来源run并验证各自真实head_sha；只重跑发布核验，不重编译。原二进制与原正式版附件均保持不变，来源与设备待验收状态继续准确记录。
+
+
+### v0.7 追加发布完成（2026-10-20 00:42，Asia/Shanghai）
+
+[独立发布39287683611](https://github.com/hacxer/rustdesk/actions/runs/39287683611)成功，已将两个新包及独立报告追加至[原正式版v1.5.0-9394-build9](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。Release ID417427248、原标签目标及原五个附件ID/摘要保持不变；draft=false、prerelease=false、Latest仍指向该版本。新增正文白名单与每项服务端SHA-256、大小均验证通过；实际存在的aarch64-signed.apk.idsig未作为必需安装附件发布。
+
+| 新包 | 最终校验与来源 | 字节数 / SHA-256 |
+| --- | --- | --- |
+| aarch64-signed.apk | arm64-v8a / ELF64 AArch64，minSdk22、target36，1.5.0.9394 / 15013009；V1/V2及原证书通过。源run39279619028，扩展aec372ecddbddb8132426f84acd8f168f003e051 | 30,601,356 / e81eeb67fbe76ba34a0727aeedee312188562b677605dc3126cfa3a55aef7e7a |
+| x86_64.exe | AMD64 PE、完整Flutter自解压包、嵌入配置及版本命令冒烟通过；Authenticode未签名。源run39281643811，扩展037f045a5397542b79a0809b1e89d6dc6c4f8c13 | 28,661,760 / 71b5e42c75cc7da35204b950c7f6f853e533c814b2607b805d2374b95ffe684b |
+
+两平台清单均匹配基准profile ece437c54f2a22da2e212b19ca2f84e8d45899fb、上游fada664df7a294d1d1a9ca3e7cd3637069122f17与公开配置摘要90e2e177cbca2bf4553a1d1f544c7fc57eed84894cf6f74fea20b729be2f1ffd。ARM32摘要仍为2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77。每个平台实际来源与仅执行上传的发布任务分别记录，未把重试/发布提交冒充原构建。
+
+附件新增aarch64与Windows独立manifest、摘要与校验报告，以及SHA256SUMS-extra；总计15个上传附件，另有GitHub自动生成的两项源码归档。Windows无代码签名证书、安装后服务/重启及新增平台完整远控仍待设备验收；T2继续使用ARM32并按原清单验收，不能将ARM64或编译成功代替T2实测。全程源码、编译、签名、打包和上传均在GitHub完成。
