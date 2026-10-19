@@ -33,8 +33,14 @@ assert {p.name for p in root.iterdir() if p.is_file()} == expected
 for name in ["aarch64-build-manifest.json", "windows-build-manifest.json"]:
     m = json.loads((root / name).read_text())
     assert m["profile_sha256"] == CONFIG and m["baseline_profile_sha"] == BASE
-    assert m["platform_extension_sha"] == os.environ["GITHUB_SHA"]
-    assert m["source_run"] == os.environ["GITHUB_RUN_ID"]
+    source_run = os.environ["ANDROID_SOURCE_RUN"] if name.startswith("aarch64") else os.environ["GITHUB_RUN_ID"]
+    assert source_run.isdigit() and m["source_run"] == source_run
+    source = api("actions/runs/" + source_run)
+    assert source["head_sha"] == m["platform_extension_sha"]
+    assert source["path"] == ".github/workflows/custom-9394-extra-platforms.yml"
+    assert source["repository"]["full_name"] == REPO
+    if name.startswith("windows"):
+        assert m["platform_extension_sha"] == os.environ["GITHUB_SHA"]
     assert m["upstream_sha"] == "fada664df7a294d1d1a9ca3e7cd3637069122f17"
 android = json.loads((root / "aarch64-build-manifest.json").read_text())
 windows = json.loads((root / "windows-build-manifest.json").read_text())
@@ -64,7 +70,8 @@ body += "\n\n" + marker + "\n\n"
 body += "- aarch64-signed.apk：Android arm64-v8a / ELF64 AArch64；版本1.5.0.9394 / 15011009，V1+V2及原证书校验通过。\n"
 body += "- x86_64.exe：Windows AMD64完整Flutter自解压包，包含DLL与资源；Authenticode未签名。安装后沿用上游自动服务，便携运行不等同于安装开机服务。\n"
 body += "- 两包与armv7使用相同上游SHA、build9公开配置和共用初始化模块；Windows新增入口适配与手动刷新临时密码行为。\n"
-body += "- 基准定制提交：" + BASE + "；平台扩展提交：" + os.environ["GITHUB_SHA"] + "。\n"
+body += "- 基准定制提交：" + BASE + "；ARM64扩展提交：" + android["platform_extension_sha"] + "；Windows扩展提交：" + windows["platform_extension_sha"] + "。\n"
+body += "- ARM64来源run：" + android["source_run"] + "；Windows来源run：" + windows["source_run"] + "。\n"
 body += "- [追加构建与校验](https://github.com/" + REPO + "/actions/runs/" + os.environ["GITHUB_RUN_ID"] + ")；摘要与独立清单见新增附件，原ARM32包和既有附件保持不变。\n"
 body += "- Android ARM64与Windows完整设备运行/安装后重启验收仍待完成；T2真机验收仍为待完成。\n"
 Path("release-update.json").write_text(json.dumps({"name": "RustDesk 9394 1.5.0 - Android ARM32/ARM64 + Windows x64 (build9)", "body": body, "draft": False, "prerelease": False, "make_latest": "true"}))
