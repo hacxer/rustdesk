@@ -44,7 +44,7 @@ if sys.argv[1] == "manifest":
         "abi": "armeabi-v7a",
         "native_api": 21,
         "profile_sha256": sha256("config/custom-9394.json"),
-        "requirements": "v0.3 plus implementation records",
+        "requirements": "v0.4 with implementation records",
         "device_validation": "PENDING: SUNMI T2 Android 7.1, 2GB RAM / 16GB storage",
         "toolchains": {"rust": os.environ["RUST_VERSION"], "flutter": "3.24.5", "ndk": "r28c"},
     }
