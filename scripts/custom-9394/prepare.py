@@ -189,6 +189,28 @@ replace_once("src/server/connection.rs", """                            if text.
                             }
                             let server_err""")
 
+
+replace_once("flutter/lib/mobile/pages/server_page.dart", "import 'home_page.dart';", "import 'home_page.dart';\nimport '../bootstrap_9394.dart';")
+replace_once("flutter/lib/mobile/pages/server_page.dart", """            gFFI.serverModel.changeStatue(name, value);
+            break;""", """            final wasMediaReady = gFFI.serverModel.mediaOk;
+            gFFI.serverModel.changeStatue(name, value);
+            if (name == "media" && value && !wasMediaReady) {
+              Bootstrap9394.onMediaReady();
+            }
+            break;""")
+replace_once(kotlin + "MainActivity.kt", "    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {", """    override fun getFlutterShellArgs(): io.flutter.embedding.engine.FlutterShellArgs {
+        val args = super.getFlutterShellArgs()
+        val x86Host = Build.SUPPORTED_ABIS.any { it == "x86" || it == "x86_64" }
+        if (Build.VERSION.SDK_INT in 24..25 && x86Host) {
+            // P026: avoid the emulator GLES/Houdini raster crash; ARM devices keep their GPU.
+            args.add(io.flutter.embedding.engine.FlutterShellArgs.ARG_ENABLE_SOFTWARE_RENDERING)
+            Log.i("9394Render", "Android 7 x86: software UI rendering enabled")
+        }
+        return args
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {""")
+
 # Android 7.1 support must include native ABI and platform checks, not just manifest edits.
 assert "minSdkVersion 22" in (ROOT / "flutter/android/app/build.gradle").read_text()
 assert "--platform 21" in (ROOT / "flutter/ndk_arm.sh").read_text()
