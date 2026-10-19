@@ -174,6 +174,21 @@ replace_once(kotlin + "MainService.kt", """    private fun voiceCallRequestNotif
         cancelNotification(clientID)
         val notification""")
 
+
+copy_source("audit_ack_9394.rs", "src/audit_ack_9394.rs")
+replace_once("src/lib.rs", "mod custom_9394;", 'mod custom_9394;\n#[cfg(target_os = "android")]\nmod audit_ack_9394;')
+replace_once("src/server/connection.rs", """                            if text.trim().is_empty() {
+                                return Ok(text);
+                            }
+                            let server_err""", """                            if text.trim().is_empty() {
+                                return Ok(text);
+                            }
+                            #[cfg(target_os = "android")]
+                            if crate::audit_ack_9394::is_legacy_success(&text) {
+                                return Ok(text);
+                            }
+                            let server_err""")
+
 # Android 7.1 support must include native ABI and platform checks, not just manifest edits.
 assert "minSdkVersion 22" in (ROOT / "flutter/android/app/build.gradle").read_text()
 assert "--platform 21" in (ROOT / "flutter/ndk_arm.sh").read_text()
