@@ -2,7 +2,7 @@
 
 - 版本：0.5，2026-10-19（Asia/Shanghai）
 - 仓库：https://github.com/hacxer/rustdesk
-- 状态：用户已手动安装 v0.4 / build8；本轮已只读雷电及控制端日志，继续 v0.5 修复。普通 U 盘部署保留必要的一次系统确认；TUN 断连仍待分路径验证。商米 T2 真机验收未完成。
+- 状态：v0.5 / build9 远程构建与签名/ARM32检查成功，已交付下载。build8桥接缺网关已由用户修正并验证注册/API/中继恢复；TUN中继可用、默认直连仍待对照。普通U盘侧载保留必要系统确认；新包功能回归及T2真机仍待验收。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
 
 ## 1. 需求清单
@@ -361,3 +361,18 @@ v0.5实施：配置新增 enable-udp-punch=Y / disable-udp=N，UDP打洞列入Lo
 
 
 2026-10-19 18:07–18:08 / P038 恢复验证：用户手动设置路由器LAN内静态地址、正确掩码、网关及DNS并重启。只读ADB确认IPv4默认路由已存在，外部IPv4 ping成功；18:07:28收到rustdesk.9394.cn:21116/21115 NAT响应与18.645ms mediator延迟，18:07:31 sysinfo updated；18:08:08收到指定中继请求并Connection opened，随后启动视频服务。结论：本次桥接无法接入问题由缺少IPv4默认网关造成，用户补齐网关后已恢复实际注册、API及中继会话。该项网络恢复验证通过，不需要为模拟器私网地址修改APK。真实画面/输入/剪贴板和长会话仍按端到端清单执行；TUN默认直连与本项分别记录，不因中继恢复关闭P034。静态地址由用户管理保留，公开文档不复制实际LAN地址或设备标识。
+
+
+## 15. v0.5 / build9 最终静态交付（2026-10-19）
+
+[Actions #9](https://github.com/hacxer/rustdesk/actions/runs/39234351129) 于18:25完成且成功。冻结定制profile=ece437c54f2a22da2e212b19ca2f84e8d45899fb，上游1.5.0/fada664df7a294d1d1a9ca3e7cd3637069122f17，hbb_common229b904508364c8997aad0fb5af57effac859f60。后续文档补充不改变本次APK来源。
+
+- 下载：[armv7-signed-9394-9](https://github.com/hacxer/rustdesk/actions/runs/39234351129/artifacts/12179272527)，ZIP解压得到armv7-signed.apk及SHA256SUMS、build-manifest.json和校验报告；不使用unverified-checkpoint。
+- APK：versionName1.5.0.9394，versionCode15011009，高于用户当前build8的15011008；minSdk22、targetSdk36、native API21，全部原生库armeabi-v7a/ELF32 ARM，字节数28,938,291。
+- APK SHA-256：2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77。
+- V1=true、V2=true；原证书匹配=true，证书SHA-256：ab939122d67c380c76ec0d89da27a1e9f18d89557b36241788a6555d621e7a39。
+- ZIP字节数28,575,983，ZIP SHA-256：93d9608702086093362f44a88405df2f9a346fda5168d134b780febe8012bf3d；与APK摘要区分。
+- API兼容测试2项通过；新启动模块Dart分析No issues，既有页面分析无error/warning；ARM原生依赖、Rust、Android/Kotlin release和最终签名/旧证书/ABI校验全部通过。manifest需求标签明确v0.5 with implementation records，T2设备验收明确PENDING。
+- 本轮实现P032电池自动引导请求记录、P033显式UDP默认及独立一次升级迁移、P036清单标签；P031/P037保留真实系统确认，系统“不再显示”不能由普通APK预勾选。P038桥接恢复是用户网关修正后的build8实测；P034的/r中继可用已实测，默认直连未关闭问题。未声称新build9运行功能或T2硬件已通过。
+
+用户下一步：保留数据覆盖安装build9，验证UDP默认迁移和后续手动选择保留、已有授权不重复申请、首次系统必要确认及取消不循环、电池豁免实际状态和请求记录；继续输入/文件/剪贴板、通知、密码及30分钟稳定性。全程源码和编译在GitHub，助手本地仅现有工具只读诊断及保存交付截图，没有安装构建工具或APK。
