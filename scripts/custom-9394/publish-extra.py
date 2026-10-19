@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -29,24 +30,29 @@ old_assets = {a["name"]: a for a in r["assets"]}
 assert old_assets["armv7-signed.apk"]["digest"] == "sha256:" + OLD_APK
 root = Path("dist")
 expected = {"aarch64-signed.apk", "aarch64-SHA256SUMS", "aarch64-build-manifest.json", "aarch64-signature-verification.txt", "aarch64-apk-badging.txt", "x86_64.exe", "windows-SHA256SUMS", "windows-build-manifest.json", "windows-validation.json"}
-assert {p.name for p in root.iterdir() if p.is_file()} == expected
+actual = {p.name for p in root.iterdir() if p.is_file()}
+assert expected <= actual
+assert actual - expected <= {"aarch64-signed.apk.idsig"}, "Unexpected release files: " + str(actual - expected)
 for name in ["aarch64-build-manifest.json", "windows-build-manifest.json"]:
     m = json.loads((root / name).read_text())
     assert m["profile_sha256"] == CONFIG and m["baseline_profile_sha"] == BASE
-    source_run = os.environ["ANDROID_SOURCE_RUN"] if name.startswith("aarch64") else os.environ["GITHUB_RUN_ID"]
+    source_run = os.environ["ANDROID_SOURCE_RUN"] if name.startswith("aarch64") else os.environ.get("WINDOWS_SOURCE_RUN", os.environ["GITHUB_RUN_ID"])
     assert source_run.isdigit() and m["source_run"] == source_run
     source = api("actions/runs/" + source_run)
     assert source["head_sha"] == m["platform_extension_sha"]
     assert source["path"] == ".github/workflows/custom-9394-extra-platforms.yml"
     assert source["repository"]["full_name"] == REPO
-    if name.startswith("windows"):
-        assert m["platform_extension_sha"] == os.environ["GITHUB_SHA"]
     assert m["upstream_sha"] == "fada664df7a294d1d1a9ca3e7cd3637069122f17"
 android = json.loads((root / "aarch64-build-manifest.json").read_text())
 windows = json.loads((root / "windows-build-manifest.json").read_text())
 assert android["apk_sha256"] == sha(root / "aarch64-signed.apk")
 assert android["signature_v1"] and android["signature_v2"] and android["original_certificate_match"]
 assert windows["sha256"] == sha(root / "x86_64.exe") and windows["authenticode"] == "UNSIGNED"
+badging = (root / "aarch64-apk-badging.txt").read_text()
+version_code = re.search(r"versionCode='(\d+)'", badging).group(1)
+version_name = re.search(r"versionName='([^']+)'", badging).group(1)
+assert version_code == "15013009" and version_name == "1.5.0.9394"
+assert "native-code: 'arm64-v8a'" in badging
 (root / "SHA256SUMS-extra").write_text("".join(sha(root / n) + "  " + n + "\n" for n in sorted(expected)))
 expected.add("SHA256SUMS-extra")
 for name in sorted(expected):
@@ -67,7 +73,7 @@ body = r["body"].replace("此版本仅包含ARM32 Android，不包含aarch64或W
 marker = "### v0.7 追加平台"
 assert marker not in body, "Release notes already extended; inspect before editing"
 body += "\n\n" + marker + "\n\n"
-body += "- aarch64-signed.apk：Android arm64-v8a / ELF64 AArch64；版本1.5.0.9394 / 15011009，V1+V2及原证书校验通过。\n"
+body += "- aarch64-signed.apk：Android arm64-v8a / ELF64 AArch64；版本" + version_name + " / " + version_code + "，V1+V2及原证书校验通过。\n"
 body += "- x86_64.exe：Windows AMD64完整Flutter自解压包，包含DLL与资源；Authenticode未签名。安装后沿用上游自动服务，便携运行不等同于安装开机服务。\n"
 body += "- 两包与armv7使用相同上游SHA、build9公开配置和共用初始化模块；Windows新增入口适配与手动刷新临时密码行为。\n"
 body += "- 基准定制提交：" + BASE + "；ARM64扩展提交：" + android["platform_extension_sha"] + "；Windows扩展提交：" + windows["platform_extension_sha"] + "。\n"
