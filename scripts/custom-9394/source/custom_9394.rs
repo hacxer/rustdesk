@@ -1,13 +1,16 @@
 use hbb_common::{
-    config::{Config, LocalConfig, DEFAULT_SETTINGS},
+    config::{Config, LocalConfig, DEFAULT_LOCAL_SETTINGS, DEFAULT_SETTINGS},
     log,
 };
 use std::{collections::HashMap, sync::Once};
 
 static INITIALIZE: Once = Once::new();
-const PROFILE_MARKER: &str = "9394-profile-v1";
+const PROFILE_MARKER: &str = "9394-profile-v2";
 const PASSWORD_MARKER: &str = "9394-password-initialized-v1";
 const SERVER_KEYS: [&str; 4] = ["custom-rendezvous-server", "relay-server", "api-server", "key"];
+const LOCAL_KEYS: [&str; 4] = [
+    "enable-tcp-punch", "enable-ipv6-punch", "enable-check-update", "show-scam-warning",
+];
 
 pub fn initialize() {
     INITIALIZE.call_once(|| {
@@ -20,8 +23,9 @@ pub fn initialize() {
                 return;
             }
         };
-        DEFAULT_SETTINGS.write().unwrap().extend(defaults.clone());
-        if LocalConfig::get_option(PROFILE_MARKER) != "Y" {
+        let migrate = LocalConfig::get_option(PROFILE_MARKER) != "Y";
+        // Read existing values before installing defaults. Preserve nonempty overrides.
+        if migrate {
             for key in SERVER_KEYS {
                 if Config::get_option(key).trim().is_empty() {
                     if let Some(value) = defaults.get(key) {
@@ -29,7 +33,19 @@ pub fn initialize() {
                     }
                 }
             }
-            LocalConfig::set_option(PROFILE_MARKER.to_owned(), "Y".to_owned());
+        }
+        for (key, value) in defaults {
+            if LOCAL_KEYS.contains(&key.as_str()) {
+                DEFAULT_LOCAL_SETTINGS.write().unwrap().insert(key, value);
+            } else {
+                DEFAULT_SETTINGS.write().unwrap().insert(key, value);
+            }
+        }
+        if migrate {
+            // One migration only; later explicit user choices remain editable.
+            LocalConfig::set_option("enable-check-update".into(), "N".into());
+            LocalConfig::set_option("show-scam-warning".into(), "N".into());
+            LocalConfig::set_option(PROFILE_MARKER.into(), "Y".into());
         }
         if LocalConfig::get_option(PASSWORD_MARKER) != "Y" {
             let initialized = if Config::has_permanent_password() {
