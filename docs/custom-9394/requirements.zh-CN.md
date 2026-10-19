@@ -337,3 +337,8 @@ P030 / 交付元数据文案：该次 build-manifest 的 requirements 描述仍�
 - TUN失败目标为模拟器NAT私网地址，另一Windows设备连接成功可能走中继或不同网络路径，不能据平台名称推断协议兼容问题。现有控制端为旧1.4.9，若其把TUN伪TCP建立误判为直连成功，Android APK无法单独更改电脑侧的路由和失败回退；需单次中继对照结果后决定控制端或TUN的精确修复范围。
 - 本轮先完成明确的UDP默认迁移、必要授权不重复引导以及构建元数据；TUN按真实证据保持开放。受管/商米系统预授权接口不在当前普通U盘部署条件内，不编造可用能力。
 - 平台依据：[Android MediaProjection](https://developer.android.com/media/grow/media-projection)、[Android Doze与电池豁免](https://developer.android.com/training/monitoring-device-state/doze-standby)。网络依据：[RustDesk force relay](https://github.com/rustdesk/rustdesk/wiki/FAQ#force-relay)、[Mihomo TUN配置](https://github.com/MetaCubeX/Meta-Docs/blob/main/docs/config/inbound/tun.en.md)。
+
+
+2026-10-19 / P034 单次中继对照：用户保持 Clash TUN 开启，在模拟器ID后加 /r 后确认可以连接并看到画面。13:08日志与反馈相符：Android收到指定中继请求、连接打开并启动VP8；控制端记录 establish Relay connection。结论：自建服务器、中继和当前APK在该TUN环境下具有可用画面链路，失败集中在模拟器私网直连路径。/r 是已验证的单次绕行方法，不等于默认直连问题已修复，也不意味着UDP默认开启就必然解决。保留TCP/UDP/IPv6默认和认证逻辑，不为此在Android全局强制中继。TUN直连兼容仍开放；可在电脑端为该模拟器保存“总是使用中继”或每次用ID/r。若继续修复直连，应先验证模拟器网络可达性及TUN排除后的系统路由，再决定精确配置；已有私网DIRECT规则，不能重复添加规则后冒充完成。
+
+v0.5实施：配置新增 enable-udp-punch=Y / disable-udp=N，UDP打洞列入LocalConfig；9394-udp-defaults-v1只迁移UDP两项一次，不重跑v0.4服务器/WebSocket/更新迁移。启动协调器增加9394-battery-prompted-v1请求记录，继续依据真实系统检查判断豁免，不伪造已授权。录屏有效状态复用与请求合并沿用已实现路径；系统必须的确认按用户最新选择保留。未来构建清单标签更新v0.5。源码均经GitHub文件回读核对，等待Actions静态检查和armv7打包；未将本轮尚未构建的改动标记运行通过。
