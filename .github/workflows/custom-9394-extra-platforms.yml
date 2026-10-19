@@ -260,8 +260,8 @@ jobs:
           "$BUILD_TOOLS/aapt" dump badging dist/aarch64-signed.apk 2>&1 | tee dist/apk-badging.txt
           python3 verify-arm64-generated.py apk
           python3 scripts/custom-9394/platforms.py finish-arm64
-          echo '### Signed aarch64 verified; SUNMI T2 device validation PENDING' >> "$GITHUB_STEP_SUMMARY"
-          cat dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          echo '### Signed aarch64 verified; Android ARM64 device validation PENDING' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/aarch64-SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: verified-extra-aarch64-${{ github.run_id }}
@@ -274,7 +274,7 @@ jobs:
         with:
           name: aarch64-diagnostics-${{ github.run_number }}
           path: |
-            dist/build-manifest.json
+            dist/*build-manifest.json
             dist/*.txt
             upstream/custom-9394-changes.json
           if-no-files-found: ignore
@@ -293,6 +293,9 @@ jobs:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
     steps:
+      - name: Preserve exact configuration bytes
+        working-directory: .
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
