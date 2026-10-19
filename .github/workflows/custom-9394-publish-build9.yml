@@ -1,0 +1,141 @@
+name: 9394 publish verified build9
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: custom-9394-release-build9
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: v1.5.0-9394-build9
+    steps:
+      - name: Download and verify frozen signed artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = hacxer/rustdesk
+          gh api repos/$GH_REPO/actions/runs/39234351129 > source-run.json
+          gh api repos/$GH_REPO/actions/artifacts/12179272527 > source-artifact.json
+          python3 - <<'PY'
+          import json
+          r = json.load(open("source-run.json"))
+          a = json.load(open("source-artifact.json"))
+          assert r["conclusion"] == "success" and r["status"] == "completed"
+          assert r["head_sha"] == "ece437c54f2a22da2e212b19ca2f84e8d45899fb"
+          assert a["name"] == "armv7-signed-9394-9" and not a["expired"]
+          assert a["workflow_run"]["id"] == 39234351129
+          assert a["workflow_run"]["head_sha"] == r["head_sha"]
+          PY
+          gh api repos/$GH_REPO/actions/artifacts/12179272527/zip > signed-artifact.zip
+          python3 - <<'PY'
+          import hashlib, json, struct, zipfile
+          from pathlib import Path
+          digest = lambda b: hashlib.sha256(b).hexdigest()
+          assert digest(Path("signed-artifact.zip").read_bytes()) == "93d9608702086093362f44a88405df2f9a346fda5168d134b780febe8012bf3d"
+          names = ["armv7-signed.apk", "SHA256SUMS", "build-manifest.json", "signature-verification.txt", "apk-badging.txt"]
+          out = Path("release-assets")
+          out.mkdir()
+          with zipfile.ZipFile("signed-artifact.zip") as z:
+              for name in names:
+                  assert z.namelist().count(name) == 1, name
+                  (out / name).write_bytes(z.read(name))
+          apk = (out / "armv7-signed.apk").read_bytes()
+          expected = "2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77"
+          assert digest(apk) == expected and len(apk) == 28938291
+          assert (out / "SHA256SUMS").read_text().split() == [expected, "armv7-signed.apk"]
+          m = json.loads((out / "build-manifest.json").read_text())
+          assert m["profile_sha"] == "ece437c54f2a22da2e212b19ca2f84e8d45899fb"
+          assert m["upstream_sha"] == "fada664df7a294d1d1a9ca3e7cd3637069122f17"
+          assert m["apk_sha256"] == expected and m["abi"] == "armeabi-v7a"
+          assert m["signature_v1"] is True and m["signature_v2"] is True
+          assert m["original_certificate_match"] is True
+          assert m["certificate_sha256"] == "ab939122d67c380c76ec0d89da27a1e9f18d89557b36241788a6555d621e7a39"
+          assert m["device_validation"].startswith("PENDING")
+          report = (out / "signature-verification.txt").read_text()
+          for scheme in ["v1 scheme (JAR signing)", "v2 scheme (APK Signature Scheme v2)"]:
+              assert "Verified using " + scheme + ": true" in report
+          badging = (out / "apk-badging.txt").read_text()
+          assert "versionCode='15011009'" in badging and "sdkVersion:'22'" in badging
+          with zipfile.ZipFile(out / "armv7-signed.apk") as z:
+              libs = [n for n in z.namelist() if n.startswith("lib/") and n.endswith(".so")]
+              assert libs and "lib/armeabi-v7a/librustdesk.so" in libs
+              for name in libs:
+                  b = z.read(name)
+                  assert name.startswith("lib/armeabi-v7a/")
+                  assert b[:4] == b"\x7fELF" and b[4] == 1 and struct.unpack_from("<H", b, 18)[0] == 40
+          Path("expected-assets.json").write_text(json.dumps({n: {"size": (out/n).stat().st_size, "digest": "sha256:" + digest((out/n).read_bytes())} for n in names}))
+          print("Frozen signed build9, manifest, V1/V2 report and ELF32 ARM verified")
+          PY
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<'EOF'
+          RustDesk 9394 定制客户端正式发布。复用已通过 GitHub Actions #9 最终校验的原 APK，不重新编译或签名。
+
+          - Android ARM32 / armeabi-v7a；版本1.5.0.9394，versionCode15011009，minSdk22。
+          - V1 + V2 签名通过，沿用原证书，可保留数据覆盖安装。
+          - 预置rustdesk.9394.cn的ID、中继、API与公钥；UDP、TCP打洞和IPv6 P2P默认开启，保留后续用户设置。
+          - 打开APP自动执行服务与真实授权检查；已有有效录屏状态继续使用，电池引导避免每次启动重复弹出。
+          - 连接、断开不自动刷新六位数字临时密码；启动检查更新默认关闭。
+          - 旧Android7 x86雷电使用软件界面渲染兼容路径；连接事件通知短暂显示，必要服务和录屏状态保留。
+
+          **部署与验证范围**
+          安装人员须交付前完成一次系统录屏“记住/不再显示”（固件提供时）、电池豁免、RustDesk Input和后台/自启配置。普通APK不自行静默授予系统权限。v0.6是已确认的部署流程，本APK实现基线仍为v0.5。
+          商米T2 Android7.1、2GB/16GB真机授权持久化、完整功能和至少30分钟稳定性仍待验收。正式发布不代表待验收项已通过；雷电既有结果不能代替T2验收。
+
+          **来源与校验**
+          - [原构建Actions #9](https://github.com/hacxer/rustdesk/actions/runs/39234351129)
+          - 定制来源：ece437c54f2a22da2e212b19ca2f84e8d45899fb
+          - 上游RustDesk1.5.0：fada664df7a294d1d1a9ca3e7cd3637069122f17
+          - APK SHA-256：2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77
+          - [安装人员操作清单](https://github.com/hacxer/rustdesk/blob/master/docs/custom-9394/README.md)
+          - [需求和发布记录](https://github.com/hacxer/rustdesk/blob/master/docs/custom-9394/requirements.zh-CN.md)
+          - [设备验收表](https://github.com/hacxer/rustdesk/blob/master/docs/custom-9394/validation.md)
+
+          直接下载armv7-signed.apk；SHA256SUMS、构建清单及签名/APK报告作为校验附件。此版本仅包含ARM32 Android，不包含aarch64或Windows。
+          EOF
+      - name: Stage release and verify uploaded assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" release-assets/* --repo "$GH_REPO" --target ece437c54f2a22da2e212b19ca2f84e8d45899fb --title "RustDesk 9394 1.5.0 - Android ARM32 (build9)" --notes-file release-notes.md --draft
+          gh api repos/$GH_REPO/releases/tags/$RELEASE_TAG > staged-release.json
+          python3 - <<'PY'
+          import json
+          r = json.load(open("staged-release.json"))
+          expected = json.load(open("expected-assets.json"))
+          assert r["draft"] is True and r["prerelease"] is False
+          assert {a["name"] for a in r["assets"]} == set(expected)
+          for a in r["assets"]:
+              assert a["state"] == "uploaded"
+              assert a["size"] == expected[a["name"]]["size"]
+              assert a["digest"] == expected[a["name"]]["digest"]
+          PY
+      - name: Publish formal latest release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false --prerelease=false --latest
+          gh api repos/$GH_REPO/releases/tags/$RELEASE_TAG > published-release.json
+          gh api repos/$GH_REPO/git/ref/tags/$RELEASE_TAG > published-tag.json
+          gh api repos/$GH_REPO/releases/latest > latest-release.json
+          python3 - <<'PY'
+          import json, os
+          r = json.load(open("published-release.json"))
+          tag = json.load(open("published-tag.json"))
+          latest = json.load(open("latest-release.json"))
+          assert r["draft"] is False and r["prerelease"] is False
+          assert latest["id"] == r["id"]
+          assert tag["object"]["sha"] == "ece437c54f2a22da2e212b19ca2f84e8d45899fb"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("### Formal Release published\n\n" + r["html_url"] + "\n\nOriginal build9 APK hash and five uploaded assets verified; T2 validation remains pending.\n")
+          PY
