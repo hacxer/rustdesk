@@ -302,3 +302,5 @@ P026 / 2026-10-19 系统保留记录定位：重新连接的雷电以 emulator-5
 P028 / 2026-10-19 构建缓存与 Flutter SDK 补丁：Actions #6（39196685904，定制源码97a5a3d2e73f17277f160f1294586084de5158ce）已通过源码适配与 API 兼容 Rust 测试（2 passed），在 Analyze Android startup 中对 Flutter SDK 应用 dropdown_menu 补丁时报 patch does not apply；尚未运行应用 Dart analyzer，也未生成 APK。可能是恢复的 SDK 缓存已含同一补丁，需在远程验证而不是直接跳过。先登记本文，再把步骤改为先 git apply --check，能正向应用则应用；否则仅在 git apply --reverse --check 通过时接受“已应用”的状态；两者均失败则继续阻止构建。验收要求新运行明确输出补丁状态并通过 Dart 分析，不能因使用缓存降低匹配检查。
 
 2026-10-19 / P028 修复提交与构建：工作流已改为正向检查/应用，或反向检查确认已存在；实际文件已从 GitHub 回读确认。定制提交670879cd91cecd79a246f60a129a755b87d56da5；Actions #7：https://github.com/hacxer/rustdesk/actions/runs/39197097944 。当前等待远程构建与完整静态检查；运行回归仍由用户执行。
+
+P029 / 2026-10-19 静态分析范围扩展：Actions #7（39197097944）已确认 Flutter SDK 补丁反向检查通过，即缓存已有同一补丁，P028 机制生效；API Rust 测试2项通过。扩大 Dart 分析到上游 server_page.dart 后，仅报3条既有 MaterialStateProperty / MaterialStatePropertyAll 的 deprecated_member_use 信息，未出现 error 或 warning，但 Flutter 默认把 info 也作为失败。先登记本文，再将检查拆分：新增 bootstrap_9394.dart 保持原严格分析；既有 server_model.dart/server_page.dart 保留完整分析输出，仅使用 --no-fatal-infos 允许信息级弃用提示，error/warning 仍使构建失败。不为消除提示修改无关上游 UI，也不关闭 analyzer。验收要求两步分析通过，日志仍保留弃用提示并确认无错误/警告。
