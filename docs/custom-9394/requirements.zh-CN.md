@@ -2,7 +2,7 @@
 
 - 版本：0.6，2026-10-19（Asia/Shanghai）
 - 仓库：https://github.com/hacxer/rustdesk
-- 状态：v0.6新增收银机交付前授权目标，部署路径待确认，普通APK首次静默授予系统权限尚未实现。已交付v0.5/build9源码、签名与摘要保持不变；免重复授权需在目标T2固件验证。
+- 状态：v0.6方案A已由用户确认：安装人员交付前统一配置系统授权，顾客日常免重复操作为验收目标。待安装人员执行及商米T2真机验收；已交付v0.5/build9源码、签名与摘要保持不变。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
 
 ## 1. 需求清单
@@ -411,4 +411,6 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 
 平台依据：[Android7.1.2 SystemUI源码](https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_base/android-7.1.2_r39/packages/SystemUI/src/com/android/systemui/media/MediaProjectionPermissionActivity.java)先检查已有projection permission，具备则直接返回授权，复选框也由SystemUI管理；这是AOSP证据，不等于商米固件验收已通过。[MediaProjectionManager公开API](https://developer.android.com/reference/android/media/projection/MediaProjectionManager)及[Android电池优化豁免](https://developer.android.com/training/monitoring-device-state/doze-standby)说明普通请求和真实状态检查。[商米DMP](https://official-website-onl.sunmi.com/partner)只作为厂商能力线索。
 
-本轮先完成需求、部署清单和验收条件，等待用户确认安装人员配置或官方预授权路径；不修改代码假装默认同意，不为文档澄清重新编译。v0.5/build9仍为上一版已通过签名与ARM32检查的包，不标为v0.6权限目标已实现。
+2026-10-19 用户确认：“可以，交付前由安装人员统一配置”。本轮正式采用方案A，由安装/维护人员承担首次系统授权及交付检查，顾客日常使用不参与配置；方案B仅保留为目标固件不能保存授权时的后续选项，不是本轮开发前置条件。
+
+实施基线继续使用v0.5/build9（versionCode15011009）。已有代码按真实录屏和电池授权状态继续启动；本次部署职责确认不要求新增产品代码或重新编译，也不将文档更新称为v0.6权限功能已完成。具体安装步骤见README，逐机验收表见validation.md。目标T2尚未执行的项目保持待验收；安装人员确认多次启动、断电重启及同签名覆盖升级均免重复提示且远控正常后，方可标记该固件交付通过。若出现已保存授权仍反复请求，先记录固件、复现时刻和脱敏日志至本文，再判断并修改代码。
