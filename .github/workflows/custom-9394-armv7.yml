@@ -69,6 +69,20 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
           rustfmt --edition 2021 src/custom_9394.rs
+      - name: Test legacy audit acknowledgment
+        run: |
+          mkdir -p "$RUNNER_TEMP/9394-audit-check/src"
+          cp scripts/custom-9394/source/audit_ack_9394.rs "$RUNNER_TEMP/9394-audit-check/src/lib.rs"
+          cp upstream/Cargo.lock "$RUNNER_TEMP/9394-audit-check/Cargo.lock"
+          cat > "$RUNNER_TEMP/9394-audit-check/Cargo.toml" <<'EOF'
+          [package]
+          name = "custom-9394-audit-check"
+          version = "0.1.0"
+          edition = "2021"
+          [dependencies]
+          serde_json = "=1.0.118"
+          EOF
+          cargo test --manifest-path "$RUNNER_TEMP/9394-audit-check/Cargo.toml"
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
           workspaces: upstream -> target
@@ -102,7 +116,7 @@ jobs:
           cd flutter
           flutter pub get
           dart format lib/mobile/bootstrap_9394.dart
-          flutter analyze --no-pub lib/mobile/bootstrap_9394.dart
+          flutter analyze --no-pub lib/mobile/bootstrap_9394.dart lib/models/server_model.dart lib/mobile/pages/server_page.dart
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
         id: ndk
         with:
