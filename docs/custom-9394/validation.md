@@ -201,10 +201,10 @@ AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测�
 | 阶段 | 通过条件 | 当前状态 |
 | --- | --- | --- |
 | 共同来源 | 精确上游/子模块、冻结基准模块及公开配置摘要一致 | 待CI检查 |
-| Android ARM64 | arm64-v8a/ELF64 AArch64、15011009、原证书/V1/V2、配置一致 | 编译/校验待完成 |
-| Windows x64 | AMD64 PE、完整Flutter自解压包、核心/服务及FFI初始化入口、版本命令冒烟 | 编译/校验待完成 |
+| Android ARM64 | arm64-v8a/ELF64 AArch64、实际15013009、原证书/V1/V2、配置一致 | 编译/最终校验通过；设备回归待完成 |
+| Windows x64 | AMD64 PE、完整Flutter自解压包、核心/服务及FFI初始化入口、版本命令冒烟 | 构建产物及上述检查通过；安装后功能待设备验收 |
 | Windows签名 | 明确Authenticode未签名，不冒充原厂签名 | 未提供Windows证书 |
-| 追加Release | 两个平台均校验后追加原正式版，原armv7与五项附件不变，逐一验证服务端摘要 | 待完成 |
+| 追加Release | 两个平台均校验后追加原正式版，原armv7与五项附件不变，逐一验证服务端摘要 | 2026-10-20独立发布39287683611通过 |
 | 设备回归 | ARM64实际设备、Windows安装后服务/重启、认证/画面/输入/文件/剪贴板 | 未执行 |
 
 本轮仅在GitHub编译、签名和打包；助手未在本地安装构建工具或运行APK/EXE。T2仍按ARM32逐机验收表执行，不把ARM64构建当成T2兼容验证。遇到新问题先更新需求，再修复工作流或代码。
@@ -215,3 +215,23 @@ AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测�
 原构建共享桥接日志确认23:46完成，2项API成功/错误响应测试通过；接口仍显示queued，结合完整日志和artifact确认实际进度。原Windows任务在准备阶段因固定配置摘要不一致停止，未发布EXE；ARM64保留原任务继续。
 
 [Windows重试39281643811](https://github.com/hacxer/rustdesk/actions/runs/39281643811)指定复用来源39279619028，冻结扩展提交037f045a5397542b79a0809b1e89d6dc6c4f8c13。修复步骤从固定Git对象以原始字节恢复配置和共用模块，并显式UTF-8/LF；仍执行原摘要断言。重试不将原ARM64产物虚记为本次编译，发布前分别校验source_run/head_sha、固定上游与公共配置，再核验所有新旧附件。当前Windows最终包和ARM64最终签名包仍待构建/验证，设备验收未执行。
+
+
+## v0.7 最终交付与追加发布验收（2026-10-20）
+
+[正式版](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)已补齐aarch64-signed.apk与x86_64.exe。[独立发布任务39287683611](https://github.com/hacxer/rustdesk/actions/runs/39287683611)成功；本次只复核并上传已完成的原二进制，没有重编译或重新签名。发布日志明确列出可选aarch64-signed.apk.idsig，严格白名单未上传此辅助文件。版本说明已读取ARM64实际badging，记为1.5.0.9394 / 15013009。
+
+| 检查 | 结果 |
+| --- | --- |
+| 共同配置 | 基准ece437c54f2a22da2e212b19ca2f84e8d45899fb；公共配置SHA-256为90e2e177cbca2bf4553a1d1f544c7fc57eed84894cf6f74fea20b729be2f1ffd；上游与子模块固定原1.5.0提交，通过 |
+| ARM64来源 | 原run39279619028，扩展aec372ecddbddb8132426f84acd8f168f003e051；artifact12203091710，最终签名/ABI检查后上传 |
+| ARM64校验 | V1=true、V2=true、原证书ab939122d67c380c76ec0d89da27a1e9f18d89557b36241788a6555d621e7a39一致；ELF64 AArch64、minSdk22、target36；新增Dart模块No issues，API测试2通过 |
+| ARM64最终文件 | 30,601,356字节；SHA-256 e81eeb67fbe76ba34a0727aeedee312188562b677605dc3126cfa3a55aef7e7a |
+| Windows来源 | 重试run39281643811，扩展037f045a5397542b79a0809b1e89d6dc6c4f8c13；artifact12205025090，在完整包、PE/配置校验和版本命令冒烟后上传 |
+| Windows校验 | AMD64 PE，完整Flutter引擎/Rust DLL/插件/资源及辅助DLL包含于自解压包；原配置摘要一致；Authenticode明确UNSIGNED |
+| Windows最终文件 | 28,661,760字节；SHA-256 71b5e42c75cc7da35204b950c7f6f853e533c814b2607b805d2374b95ffe684b |
+| 追加发布 | 15个上传附件均uploaded，新增附件大小及服务端digest逐一核对；Latest、非草稿/非预发布状态保持；原五个附件ID和digest未改 |
+| 来源说明 | 原run因其他平台失败的整体结论不等于其verified产物未通过；独立发布只接受名称、来源run/head_sha和具体文件检查均匹配的已验证产物，不把发布run冒充编译来源 |
+| 设备运行 | ARM64真实设备、Windows安装后服务/重启和完整远控、30分钟稳定性未执行；T2仍待真机验收 |
+
+直接下载：[aarch64-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/aarch64-signed.apk)、[x86_64.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86_64.exe)。两平台独立清单、报告与SHA256SUMS-extra均位于同一Release。原ARM32包及文档中的安装人员预配置、用户设置保留约定不变。
