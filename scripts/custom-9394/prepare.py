@@ -72,6 +72,108 @@ replace_once(settings, """  Future<bool> checkAndUpdateStartOnBoot() async {
   }""")
 replace_once("flutter/android/app/build.gradle", "signingConfig signingConfigs.release", "signingConfig signingConfigs.debug")
 
+
+# v0.4 manual-test fixes. Each anchor must still match the reviewed upstream.
+replace_once("src/flutter_ffi.rs", "        std::thread::spawn(move || start_server(true));", "        crate::custom_9394::initialize();\n        std::thread::spawn(move || start_server(true));")
+replace_once(kotlin + "MainActivity.kt", '                "9394_input_ready" -> result.success(InputService.isOpen)', '                "9394_media_ready" -> result.success(MainService.isReady)\n                "9394_input_ready" -> result.success(InputService.isOpen)')
+replace_once(kotlin + "MainActivity.kt", "    private fun requestMediaProjection() {", """    private var mediaProjectionRequestPending9394 = false
+
+    private fun requestMediaProjection() {
+        if (MainService.isReady || mediaProjectionRequestPending9394) return
+        mediaProjectionRequestPending9394 = true""")
+replace_once(kotlin + "MainActivity.kt", """        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_IMPORT_FILES) {""", """        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION) {
+            mediaProjectionRequestPending9394 = false
+        }
+        if (requestCode == REQ_IMPORT_FILES) {""")
+replace_once("flutter/lib/models/server_model.dart", """      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close, context) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_service_will_start_tip")),
+          actions: [
+            dialogButton("Cancel", onPressed: close, isOutline: true),
+            dialogButton("OK", onPressed: submit),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
+      if (res == true) {
+        startService();
+      }""", """      await startService();""")
+replace_once("src/server/connection.rs", """        // One-time means gone once it has let a peer in, not once that peer
+        // leaves. This session's later logins come in on the password the
+        // session remembers, so they are not affected.
+        password::update_temporary_password();""", """        // 9394 Android keeps the displayed password until an explicit refresh.
+        #[cfg(not(target_os = "android"))]
+        password::update_temporary_password();""")
+replace_once("src/server/connection.rs", """    fn check_update_temporary_password(&self, temporary_password_success: bool) {
+        const MAX_CONSECUTIVE_FAILURES: i32 = 10;""", """    fn check_update_temporary_password(&self, temporary_password_success: bool) {
+        // Independent login throttling / IP and prefix blocking remain unchanged.
+        if cfg!(target_os = "android") {
+            return;
+        }
+        const MAX_CONSECUTIVE_FAILURES: i32 = 10;""")
+replace_once(kotlin + "MainService.kt", "        val restartCapture = wasCapturing || captureRestartPending", "        val restartCapture = true // 9394: capture immediately after genuine system authorization")
+replace_once(kotlin + "MainService.kt", "    private lateinit var notificationBuilder: NotificationCompat.Builder", """    private lateinit var notificationBuilder: NotificationCompat.Builder
+    private val connectionNoticeHandler9394 = Handler(Looper.getMainLooper())
+    private val connectionNoticeTokens9394 = java.util.concurrent.ConcurrentHashMap<Int, Any>()""")
+replace_once(kotlin + "MainService.kt", """        cancelNotification(clientID)
+        val notification = notificationBuilder
+            .setOngoing(false)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setContentTitle("$type ${translate("Established")}")
+            .setContentText("$username - $peerId")
+            .build()
+        notificationManager.notify(getClientNotifyID(clientID), notification)""", """        cancelNotification(clientID)
+        // A separate builder keeps connection-event state out of the foreground notice.
+        val notification = NotificationCompat.Builder(this, notificationChannel)
+            .setSmallIcon(R.mipmap.ic_stat_logo)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setDefaults(Notification.DEFAULT_ALL)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setTimeoutAfter(3000L)
+            .setContentTitle("$type ${translate("Established")}")
+            .setContentText("$username - $peerId")
+            .build()
+        val token = Any()
+        connectionNoticeTokens9394[clientID] = token
+        notificationManager.notify(getClientNotifyID(clientID), notification)
+        // API 25 ignores timeoutAfter, so explicitly cancel this event as well.
+        connectionNoticeHandler9394.postDelayed({
+            if (connectionNoticeTokens9394.remove(clientID, token)) {
+                notificationManager.cancel(getClientNotifyID(clientID))
+            }
+        }, 3000L)""")
+replace_once(kotlin + "MainService.kt", """    fun cancelNotification(clientID: Int) {
+        notificationManager.cancel(getClientNotifyID(clientID))""", """    fun cancelNotification(clientID: Int) {
+        connectionNoticeTokens9394.remove(clientID)
+        notificationManager.cancel(getClientNotifyID(clientID))""")
+replace_once(kotlin + "MainService.kt", """    private fun voiceCallRequestNotification(
+        clientID: Int,
+        type: String,
+        username: String,
+        peerId: String
+    ) {
+        val notification""", """    private fun voiceCallRequestNotification(
+        clientID: Int,
+        type: String,
+        username: String,
+        peerId: String
+    ) {
+        cancelNotification(clientID)
+        val notification""")
+
 # Android 7.1 support must include native ABI and platform checks, not just manifest edits.
 assert "minSdkVersion 22" in (ROOT / "flutter/android/app/build.gradle").read_text()
 assert "--platform 21" in (ROOT / "flutter/ndk_arm.sh").read_text()
