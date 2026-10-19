@@ -107,7 +107,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api --paginate repos/$GH_REPO/releases --jq '.[]' --slurp > release-list.json
+          gh api "repos/$GH_REPO/releases?per_page=100" > release-list.json
           RELEASE_ID=$(python3 - <<'PY'
           import json, os
           rows = json.load(open("release-list.json"))
@@ -118,7 +118,7 @@ jobs:
           )
           if [ -z "$RELEASE_ID" ]; then
             gh release create "$RELEASE_TAG" release-assets/* --repo "$GH_REPO" --target ece437c54f2a22da2e212b19ca2f84e8d45899fb --title "RustDesk 9394 1.5.0 - Android ARM32 (build9)" --notes-file release-notes.md --draft
-            gh api --paginate repos/$GH_REPO/releases --jq '.[]' --slurp > release-list.json
+            gh api "repos/$GH_REPO/releases?per_page=100" > release-list.json
             RELEASE_ID=$(python3 - <<'PY'
           import json, os
           hits = [r for r in json.load(open("release-list.json")) if r["tag_name"] == os.environ["RELEASE_TAG"]]
