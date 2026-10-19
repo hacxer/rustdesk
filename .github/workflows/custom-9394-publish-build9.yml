@@ -107,13 +107,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" release-assets/* --repo "$GH_REPO" --target ece437c54f2a22da2e212b19ca2f84e8d45899fb --title "RustDesk 9394 1.5.0 - Android ARM32 (build9)" --notes-file release-notes.md --draft
-          gh api repos/$GH_REPO/releases/tags/$RELEASE_TAG > staged-release.json
+          gh api --paginate repos/$GH_REPO/releases --jq '.[]' --slurp > release-list.json
+          RELEASE_ID=$(python3 - <<'PY'
+          import json, os
+          rows = json.load(open("release-list.json"))
+          hits = [r for r in rows if r["tag_name"] == os.environ["RELEASE_TAG"]]
+          assert len(hits) <= 1
+          print(hits[0]["id"] if hits else "")
+          PY
+          )
+          if [ -z "$RELEASE_ID" ]; then
+            gh release create "$RELEASE_TAG" release-assets/* --repo "$GH_REPO" --target ece437c54f2a22da2e212b19ca2f84e8d45899fb --title "RustDesk 9394 1.5.0 - Android ARM32 (build9)" --notes-file release-notes.md --draft
+            gh api --paginate repos/$GH_REPO/releases --jq '.[]' --slurp > release-list.json
+            RELEASE_ID=$(python3 - <<'PY'
+          import json, os
+          hits = [r for r in json.load(open("release-list.json")) if r["tag_name"] == os.environ["RELEASE_TAG"]]
+          assert len(hits) == 1
+          print(hits[0]["id"])
+          PY
+            )
+          fi
+          echo "RELEASE_ID=$RELEASE_ID" >> "$GITHUB_ENV"
+          gh api repos/$GH_REPO/releases/$RELEASE_ID > staged-release.json
           python3 - <<'PY'
           import json
           r = json.load(open("staged-release.json"))
           expected = json.load(open("expected-assets.json"))
           assert r["draft"] is True and r["prerelease"] is False
+          assert r["target_commitish"] == "ece437c54f2a22da2e212b19ca2f84e8d45899fb"
           assert {a["name"] for a in r["assets"]} == set(expected)
           for a in r["assets"]:
               assert a["state"] == "uploaded"
@@ -124,7 +145,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false --prerelease=false --latest
+          gh api --method PATCH repos/$GH_REPO/releases/$RELEASE_ID -F draft=false -F prerelease=false -f make_latest=true > publish-response.json
           gh api repos/$GH_REPO/releases/tags/$RELEASE_TAG > published-release.json
           gh api repos/$GH_REPO/git/ref/tags/$RELEASE_TAG > published-tag.json
           gh api repos/$GH_REPO/releases/latest > latest-release.json
