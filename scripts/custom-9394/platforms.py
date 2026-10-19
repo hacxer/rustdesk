@@ -67,6 +67,7 @@ if command == "prepare-windows":
     replace("src/server/connection.rs", 'if cfg!(target_os = "android") {\n            return;', 'if cfg!(any(target_os = "android", target_os = "windows")) {\n            return;')
     replace("src/server/connection.rs", '#[cfg(target_os = "android")]\n                            if crate::audit_ack_9394::is_legacy_success', '#[cfg(any(target_os = "android", target_os = "windows"))]\n                            if crate::audit_ack_9394::is_legacy_success')
     assert 'start= auto' in (ROOT / "src/platform/windows.rs").read_text(encoding="utf-8")
+    replace("flutter/pubspec.yaml", "version: 1.5.0+68", "version: 1.5.0+9394")
     print("Windows core/service and Flutter entry points initialized; shared profile unchanged")
 elif command == "arm64-verifier":
     baseline_check()
