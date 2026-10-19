@@ -428,3 +428,6 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 ### P043 发布流程：草稿尚未生成标签时查询404
 
 首次发布任务39273820575已通过原ZIP、APK摘要、manifest、签名报告与ELF32 ARM核验，gh release create已建立草稿并上传附件；随后按tags路径查询草稿返回404，因此正式发布步骤未执行。GitHub草稿可能显示untagged地址，不能据此把APK判为损坏或重复创建版本。修复为通过Release集合按精确tag_name取得唯一Release ID，再按ID读取并校验草稿和附件；若已有同名草稿则仅复用且要求来源目标与所有附件摘要一致，不覆盖不匹配附件。核验后按ID转为非草稿、非预发布及Latest，再复读正式标签指向和附件。原APK保持不变；修复后重新手动运行发布工作流。
+
+
+2026-10-19 23:01（Asia/Shanghai）/ R42、P042、P043完成：修正后的[发布任务39274217579](https://github.com/hacxer/rustdesk/actions/runs/39274217579)成功，复用原草稿并核验全部附件后发布[正式版v1.5.0-9394-build9](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。API回读draft=false、prerelease=false，Latest指向本版；标签实际指向ece437c54f2a22da2e212b19ca2f84e8d45899fb。五个附件（APK、SHA256SUMS、manifest、签名报告、APK信息）全部uploaded并核对服务端摘要；APK仍为28,938,291字节，SHA-256与第15节一致。无重新编译或签名，无额外平台包。T2真机及长会话验收保持待完成，安装人员预配置约定不变。
