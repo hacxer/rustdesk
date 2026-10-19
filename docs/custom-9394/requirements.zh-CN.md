@@ -1,6 +1,6 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.6，2026-10-19（Asia/Shanghai）
+- 版本：0.7，2026-10-19（Asia/Shanghai）
 - 仓库：https://github.com/hacxer/rustdesk
 - 状态：v0.6方案A已由用户确认：安装人员交付前统一配置系统授权，顾客日常免重复操作为验收目标。待安装人员执行及商米T2真机验收；已交付v0.5/build9源码、签名与摘要保持不变。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
@@ -431,3 +431,14 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 
 
 2026-10-19 23:01（Asia/Shanghai）/ R42、P042、P043完成：修正后的[发布任务39274217579](https://github.com/hacxer/rustdesk/actions/runs/39274217579)成功，复用原草稿并核验全部附件后发布[正式版v1.5.0-9394-build9](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。API回读draft=false、prerelease=false，Latest指向本版；标签实际指向ece437c54f2a22da2e212b19ca2f84e8d45899fb。五个附件（APK、SHA256SUMS、manifest、签名报告、APK信息）全部uploaded并核对服务端摘要；APK仍为28,938,291字节，SHA-256与第15节一致。无重新编译或签名，无额外平台包。T2真机及长会话验收保持待完成，安装人员预配置约定不变。
+
+
+## 19. v0.7 / R43–R45 多平台补齐现有正式版
+
+用户明确授权继续按相同配置编译aarch64-signed.apk、x86_64.exe，并上传现有正式版v1.5.0-9394-build9；先更新需求，全程GitHub。此授权允许在T2真机验收尚未完成时继续其他平台构建，但不得把待验收状态写成已通过。
+
+- R43 Android ARM64：固定上游fada664df7a294d1d1a9ca3e7cd3637069122f17及hbb_common229b904508364c8997aad0fb5af57effac859f60。使用build9定制来源ece437c54f2a22da2e212b19ca2f84e8d45899fb的config/custom-9394.json、Android适配和初始化模块；公开配置摘要必须与build9相同。仅切换arm64-v8a原生ABI与64位ELF检查，保持版本1.5.0.9394/versionCode15011009、原证书和V1+V2；不能用ARM32包改名代替。Android系统授权仍按安装人员交付前配置与真实授权检查执行。
+- R44 Windows x64：同一上游SHA及公开配置文件，沿用相同初始化模块及Secret注入固定密码，新增明确Windows入口适配：核心入口在启动服务前加载配置，Flutter DLL初始化也加载默认值；服务进程与普通用户分别使用正确上下文，保留既有非空自定义值、用户密码与后续选择。Windows临时密码按相同需求只手动刷新，错误密码限流/封禁不变。沿用上游安装与自动服务，便携运行不能承诺自动安装或开机运行。发布Flutter完整自解压x64 EXE，不能只上传缺DLL/资源的runner。未提供Windows代码签名证书，明确标注Authenticode未签名，不冒用上游签名。
+- R45 追加发布：原正式版标签与armv7及已有附件保持不变；两个新包分别附带独立构建清单、SHA256和平台校验报告。记录build9基准profile及新增平台适配提交，公开配置及共用模块摘要核对，不能将扩展提交误写成原build9全部源码。上传前检查Release身份及原armv7摘要，不覆盖同名不同内容附件，保留Latest和正式状态。
+
+实施：新增独立平台构建/验证/追加发布流程，工具链依照固定上游CI，Android复用已通过的流程。需要修复时先在本节登记新问题，再修改代码或构建步骤。校验包括原证书/V1/V2、ELF64 AArch64，Windows PE AMD64、自解压所需资源/依赖、配置初始化入口及必要冒烟检查；运行设备验收与静态构建通过分别记录。助手不在本地安装任何构建工具或APK/EXE，构建、签名、打包和上传都在GitHub runner完成。
