@@ -124,3 +124,22 @@ v0.5新增必测：覆盖安装时UDP与UDP打洞开；此后手动关闭再重�
 ### P038 桥接恢复复查（18:07–18:08）
 
 用户已自行设置静态IP、网关并重启；ADB确认LAN /24及有效IPv4默认路由，外部IPv4可达。18:07:28收到指定服务器21116/21115 NAT及mediator响应（18.645ms），18:07:31 sysinfo updated；18:08:08指定中继会话Connection opened，随后视频服务启动。本次“桥接无法接入”因缺IPv4网关导致，网关修正后注册/API/中继会话恢复验证通过；此结论针对仍在运行的build8，不冒称未来build9已真机通过。TUN默认直连P034与30分钟稳定性/T2验收仍开放。
+
+
+## 当前交付：v0.5 / Actions #9（18:25静态完成）
+
+[下载交付ZIP](https://github.com/hacxer/rustdesk/actions/runs/39234351129/artifacts/12179272527)，解压安装armv7-signed.apk。构建[Actions #9](https://github.com/hacxer/rustdesk/actions/runs/39234351129)成功，profile ece437c54f2a22da2e212b19ca2f84e8d45899fb，上游1.5.0/fada664df7a294d1d1a9ca3e7cd3637069122f17。
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 版本 | 1.5.0.9394 / 15011009，可覆盖15011008 |
+| 静态兼容 | minSdk22、target36、native API21、armeabi-v7a全部ELF32 ARM |
+| 签名 | V1=true、V2=true，原证书一致 |
+| 证书SHA-256 | ab939122d67c380c76ec0d89da27a1e9f18d89557b36241788a6555d621e7a39 |
+| APK字节数 / SHA-256 | 28,938,291 / 2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77 |
+| ZIP字节数 / SHA-256 | 28,575,983 / 93d9608702086093362f44a88405df2f9a346fda5168d134b780febe8012bf3d |
+| 自动检查 | API测试2通过；新增Dart模块No issues；既有页面无error/warning；原生依赖/Rust/APK/最终签名与ABI检查通过 |
+| 需求清单标签 | v0.5 with implementation records；T2 device_validation=PENDING |
+| 运行状态 | 助手未安装或操作新包；用户覆盖安装回归待执行，T2真机未测 |
+
+P038桥接缺网关恢复已由build8现场日志验证；P034 TUN开启+ID/r中继画面已由用户确认，默认直连对照仍待用户反馈。现有观察未发现安装build8后的新crash，但未完成30分钟连续远控，不关闭所有崩溃/稳定性验收。P037系统“不再显示”普通APK不能预勾选，按已接受的一次必要系统确认执行。下一轮问题仍先更新需求再改代码。
