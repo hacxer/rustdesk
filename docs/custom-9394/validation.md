@@ -179,3 +179,16 @@ P034默认入口可用性在恢复网关后的桥接场景已验证；原NAT和�
 AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测。若完成首次记住授权后仍重复请求，记录具体固件、复现步骤、时间及脱敏证据，先更新需求再判断代码问题；跨重启不能保持时不承诺该固件免确认，另行评估官方预授权方式。顾客免操作不等于首次安装无需任何人同意，系统撤销授权或恢复出厂属于维护事件。
 
 此前雷电build8的服务器/桥接/TUN可用证据与build9静态签名结果保持各自范围；不能挪作本表的T2运行通过记录。build9下载、证书和摘要均保持不变。
+
+
+## 正式发布验收：v1.5.0-9394-build9（2026-10-19 23:01）
+
+[正式Release](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)已公开并设为Latest；[发布任务39274217579](https://github.com/hacxer/rustdesk/actions/runs/39274217579)成功。首次任务仅因未发布草稿的tags查询404停止，P043先登记后修复，复用原草稿，未重复构建或更改APK。
+
+- API回读draft=false、prerelease=false，Latest release ID417427248。
+- 标签目标ece437c54f2a22da2e212b19ca2f84e8d45899fb，与原构建profile一致。
+- 原ZIP摘要、APK摘要、manifest来源、V1/V2报告、版本及ELF32 ARM发布前全部复核通过。
+- Release附件5项：armv7-signed.apk、SHA256SUMS、build-manifest.json、signature-verification.txt、apk-badging.txt；服务端uploaded状态、字节数与SHA-256逐一核对通过。APK仍为28,938,291字节，SHA-256为2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77。
+- 发行说明保留安装人员首次配置、T2真实固件授权持久化及至少30分钟稳定性待验收范围。发布成功不将上述逐机模板自动改为通过。
+
+优先使用[Release直接APK](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/armv7-signed.apk)，原Actions产物保留为来源证据。没有发布私钥、口令、未校验checkpoint或设备原始日志。
