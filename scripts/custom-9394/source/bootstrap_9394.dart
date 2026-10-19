@@ -20,6 +20,10 @@ class Bootstrap9394 extends WidgetsBindingObserver {
     instance._continueStartup();
   }
 
+  static void onMediaReady() {
+    _instance?._continueStartup();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _continueStartup();
@@ -46,6 +50,7 @@ class Bootstrap9394 extends WidgetsBindingObserver {
       }
       // Cancellation/stop never causes an automatic authorization request loop.
       if (!mediaReady || !gFFI.serverModel.isStart) return;
+      await gFFI.invokeMethod('start_capture');
       final inputReady = await gFFI.invokeMethod('9394_input_ready') == true;
       if (!inputReady && !_askedInput) {
         _askedInput = true;
