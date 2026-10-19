@@ -192,3 +192,19 @@ AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测�
 - 发行说明保留安装人员首次配置、T2真实固件授权持久化及至少30分钟稳定性待验收范围。发布成功不将上述逐机模板自动改为通过。
 
 优先使用[Release直接APK](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/armv7-signed.apk)，原Actions产物保留为来源证据。没有发布私钥、口令、未校验checkpoint或设备原始日志。
+
+
+## v0.7 追加平台构建（进行中）
+
+[Actions39279619028](https://github.com/hacxer/rustdesk/actions/runs/39279619028)已手动启动；本轮扩展提交aec372ecddbddb8132426f84acd8f168f003e051，基准profile仍为ece437c54f2a22da2e212b19ca2f84e8d45899fb，上游fada664df7a294d1d1a9ca3e7cd3637069122f17。公共配置必须匹配build9摘要90e2e177cbca2bf4553a1d1f544c7fc57eed84894cf6f74fea20b729be2f1ffd。
+
+| 阶段 | 通过条件 | 当前状态 |
+| --- | --- | --- |
+| 共同来源 | 精确上游/子模块、冻结基准模块及公开配置摘要一致 | 待CI检查 |
+| Android ARM64 | arm64-v8a/ELF64 AArch64、15011009、原证书/V1/V2、配置一致 | 编译/校验待完成 |
+| Windows x64 | AMD64 PE、完整Flutter自解压包、核心/服务及FFI初始化入口、版本命令冒烟 | 编译/校验待完成 |
+| Windows签名 | 明确Authenticode未签名，不冒充原厂签名 | 未提供Windows证书 |
+| 追加Release | 两个平台均校验后追加原正式版，原armv7与五项附件不变，逐一验证服务端摘要 | 待完成 |
+| 设备回归 | ARM64实际设备、Windows安装后服务/重启、认证/画面/输入/文件/剪贴板 | 未执行 |
+
+本轮仅在GitHub编译、签名和打包；助手未在本地安装构建工具或运行APK/EXE。T2仍按ARM32逐机验收表执行，不把ARM64构建当成T2兼容验证。遇到新问题先更新需求，再修复工作流或代码。
