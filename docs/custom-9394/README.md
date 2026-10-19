@@ -1,6 +1,14 @@
 # RustDesk 9394 GitHub 构建入口
 
-**正式版已发布（2026-10-19）：[v1.5.0-9394-build9 / Latest](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。** [直接下载armv7-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/armv7-signed.apk)，无需解压；校验摘要、manifest及签名报告见Release附件。APK与原build9完全一致，V1/V2及原证书校验通过。安装人员按本文交付前统一配置；商米T2真机和30分钟稳定性仍待验收。下方Actions ZIP为原构建归档入口。
+**当前正式版：[v1.5.0-9394-build9 / Latest](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。2026-10-20已补齐ARM64与Windows x64。**
+
+| 平台 | 直接下载 | 校验说明 |
+| --- | --- | --- |
+| Android ARM32 | [armv7-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/armv7-signed.apk) | 原build9不变；V1/V2及原证书，15011009；T2真机待验收 |
+| Android ARM64 | [aarch64-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/aarch64-signed.apk) | ELF64 AArch64、V1/V2及原证书；实际versionCode15013009 |
+| Windows x64 | [x86_64.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86_64.exe) | AMD64完整Flutter自解压包；Authenticode未签名 |
+
+三平台使用相同固定上游与build9公开配置。新增两包分别记录实际构建run和扩展提交，校验摘要、独立manifest及报告见Release附件，详细记录见validation.md。Android按下方清单由安装人员交付前配置；Windows需完成上游安装流程才具备安装后的自动服务。新增平台完整设备运行、安装后重启及30分钟稳定性仍待验收。下方Actions ZIP为原构建归档入口。
 
 - [需求与问题记录](requirements.zh-CN.md)
 - [构建及设备验收](validation.md)
@@ -24,7 +32,7 @@
 
 更新前先修改需求/问题记录及来源版本，再调整适配，先单独构建并验收 armv7；同一批次的其他平台必须使用相同的上游真实 SHA 和配置。定制适配保存在本仓库独立文件中，无需在本地安装 Rust、Flutter 或 Android 构建工具。
 
-armv7已按用户明确授权正式发布，T2真机验收仍待完成。v0.7新增ARM64及Windows x64扩展工作流，按相同固定上游与build9配置构建并校验后追加同一正式版；当前进度和来源见validation.md。自动升级PR入口尚未实施，没有启用定时任务。
+armv7已按用户明确授权正式发布，T2真机验收仍待完成。v0.7已新增ARM64及Windows x64扩展工作流，并按相同固定上游与build9配置完成校验、追加同一正式版；来源和验收范围见validation.md。自动升级PR入口尚未实施，没有启用定时任务。
 
 2026-10-19：按用户要求，APK 安装与雷电模拟器运行测试由用户手动完成；[验收清单](validation.md)包含首次授权、自动服务、认证与远控功能检查。本轮助手完成 GitHub 打包和静态校验后提供交付 artifact 链接。
 
