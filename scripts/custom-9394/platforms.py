@@ -57,7 +57,14 @@ def pe64(path):
 
 
 command = sys.argv[1]
-if command == "prepare-windows":
+if command == "normalize-windows":
+    for name in ["config/custom-9394.json", "scripts/custom-9394/source/custom_9394.rs", "scripts/custom-9394/source/bootstrap_9394.dart", "scripts/custom-9394/source/audit_ack_9394.rs"]:
+        data = subprocess.check_output(["git", "-C", "baseline", "show", "HEAD:" + name])
+        (Path("baseline") / name).write_bytes(data)
+    Path("config/custom-9394.json").write_bytes(Path("baseline/config/custom-9394.json").read_bytes())
+    assert digest("baseline/config/custom-9394.json") == CONFIG_HASH
+    print("Canonical frozen Git bytes restored and verified")
+elif command == "prepare-windows":
     baseline_check()
     replace("src/lib.rs", '#[cfg(target_os = "android")]\nmod custom_9394;', '#[cfg(any(target_os = "android", target_os = "windows"))]\nmod custom_9394;')
     replace("src/lib.rs", '#[cfg(target_os = "android")]\nmod audit_ack_9394;', '#[cfg(any(target_os = "android", target_os = "windows"))]\nmod audit_ack_9394;')
