@@ -42,6 +42,7 @@ pub fn initialize() {
             }
         }
         if migrate {
+            Config::set_option("allow-websocket".into(), "N".into());
             // One migration only; later explicit user choices remain editable.
             LocalConfig::set_option("enable-check-update".into(), "N".into());
             LocalConfig::set_option("show-scam-warning".into(), "N".into());
