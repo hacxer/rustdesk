@@ -16,5 +16,7 @@
   "enable-ipv6-punch": "Y",
   "enable-check-update": "N",
   "show-scam-warning": "N",
-  "allow-websocket": "N"
+  "allow-websocket": "N",
+  "enable-udp-punch": "Y",
+  "disable-udp": "N"
 }
