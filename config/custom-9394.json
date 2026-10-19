@@ -11,5 +11,9 @@
   "stop-service": "N",
   "enable-keyboard": "Y",
   "enable-file-transfer": "Y",
-  "enable-clipboard": "Y"
+  "enable-clipboard": "Y",
+  "enable-tcp-punch": "Y",
+  "enable-ipv6-punch": "Y",
+  "enable-check-update": "N",
+  "show-scam-warning": "N"
 }
