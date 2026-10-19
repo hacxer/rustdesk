@@ -75,8 +75,16 @@ class Bootstrap9394 extends WidgetsBindingObserver {
       }
       final boot = await gFFI.invokeMethod('get_start_on_boot_opt') == true;
       if (boot && androidVersion >= 23) {
-        if (!_askedBattery && !await AndroidPermissionManager.check(kRequestIgnoreBatteryOptimizations)) {
+        final batteryGranted = await AndroidPermissionManager.check(
+            kRequestIgnoreBatteryOptimizations);
+        final batteryPrompted = bind.mainGetLocalOption(
+                key: '9394-battery-prompted-v1') ==
+            'Y';
+        if (!_askedBattery && !batteryGranted && !batteryPrompted) {
           _askedBattery = true;
+          // Remember the request, never pretend it granted the OS exemption.
+          // A denied/cancelled request can still be granted manually in Settings.
+          bind.mainSetLocalOption(key: '9394-battery-prompted-v1', value: 'Y');
           await gFFI.invokeMethod('request_permission', kRequestIgnoreBatteryOptimizations);
           return;
         }
