@@ -296,3 +296,5 @@ P026 诊断记录：尝试只读获取指定雷电的 Android crash buffer 时�
 P027 / R30 API 审计响应兼容：日志中 API 返回 HTTP2xx 且 JSON 为 code=0、message=success、data=空字符串，上游新版审计逻辑只接受空响应体，误判为失败并多次重试。Android 定制仅为这个精确成功结构增加兼容；非2xx、非零 code、error 字段、未知/畸形正文仍按原失败与重试处理，保留审计上报与认证，不通过关闭审计消除错误。验收要求精确成功响应不重试，错误与未知响应不误认成功。此问题与崩溃没有已证实因果关系，不将其标记为崩溃根因。
 
 P026 进一步诊断：当前 Android crash buffer 为空，release 包不允许 run-as 读取私有目录；未提权、未更改权限。现有外部日志没有 panic/fatal/Java 异常堆栈，因此崩溃仍待用户复现后的即时错误日志；不凭 IPv6 不可达、视频 SWITCH 或 JNI 警告认定原因。IPv6 默认启用仅表示允许尝试，模拟器网络不支持 IPv6 时仍应走可用 IPv4 路径。
+
+P026 / 2026-10-19 系统保留记录定位：重新连接的雷电以 emulator-5554 可读，Android 7.1.2。DropBox 保留了 v15011005（1.5.0.9394）的 data_app_native_crash：Flutter 1.raster 线程 SIGSEGV / SEGV_ACCERR；调用链为 libc memcpy → libstagefright_soft_gl2enc → glTexSubImage2D → libGLESv2_adreno → libhoudini，实际 ABI 为 x86 并通过 Houdini 运行 ARM APK。这是模拟器图形/ARM 翻译路径的明确崩溃证据，不是已证实的 Rust 服务器配置错误。首轮按证据增加 Android 7.x x86 模拟环境专用的 Flutter 软件渲染兼容路径，避免该 GLES 纹理上传路径；ARM 商米 T2 保持原硬件渲染路径，远程屏幕采集与编码不随 UI 渲染开关改变。新包仍需用户复测同一步骤，未复测前状态为“已定位崩溃路径，兼容修复待验收”，不承诺所有崩溃已解决。验收补充：雷电检测命中软件渲染，冷启动、共享建立、切换页面/后台与 30 分钟会话稳定；ARM 真机不命中该模拟器条件。
