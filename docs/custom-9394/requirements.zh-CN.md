@@ -447,3 +447,10 @@ P034状态细分：桥接网关恢复后TUN开启+默认入口无需/r可显示�
 ### P044 追加平台构建前检查
 
 静态审查发现：ARM64校验报告改为独立前缀后，摘要展示和诊断上传仍引用旧文件名；应统一为aarch64前缀，不能因改名漏校验或假报构建失败。Windows检出须禁止自动CRLF转换，按Git原始字节验证与build9公开配置摘要一致；不得通过忽略配置摘要绕过。新平台构建须先执行Python语法、源码锚点及配置一致性检查，失败不发布。
+
+
+### P045 Windows检出字节一致性与单平台重试
+
+首轮Windows任务118154864937在准备阶段触发baseline/config/custom-9394.json摘要断言；共享桥接已成功生成，ARM64构建继续。此前仅设置core.autocrlf=false仍不足以保证工作区字节。修复为在GitHub Windows runner明确UTF-8与LF设置，并从固定baseline Git对象以二进制方式恢复公开配置及共用模块文件，再验证原固定摘要；不能放松摘要或改服务器参数。源码差异检查允许平台CRLF行尾，但继续检查其他空白问题。
+
+为避免重编译已通过的桥接及ARM64，允许手动指定同仓库原构建run复用其verified ARM64 artifact，Windows独立重试。发布必须分别记录每个平台真实source_run、extension SHA，并与相应workflow run的head_sha及既定工作流路径核对；原run可能因另一平台失败而整体失败，不能因此把已验证artifact改记为新run构建。仍要求两包来源、配置、签名/ABI及摘要校验通过，原正式版附件不变。状态接口出现明显滞后时结合完整job日志与artifact证据，不能只据queued字样判定尚未执行。
