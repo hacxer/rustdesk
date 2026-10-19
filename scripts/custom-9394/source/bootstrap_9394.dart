@@ -6,6 +6,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 class Bootstrap9394 extends WidgetsBindingObserver {
   static Bootstrap9394? _instance;
   bool _busy = false;
+  bool _resumePending = false;
   bool _askedInput = false;
   bool _askedBattery = false;
   bool _askedOverlay = false;
@@ -25,11 +26,26 @@ class Bootstrap9394 extends WidgetsBindingObserver {
   }
 
   Future<void> _continueStartup() async {
-    if (_busy) return;
+    if (_busy) {
+      _resumePending = true;
+      return;
+    }
+    if (bind.mainGetLocalOption(key: '9394-auto-start') == 'N') return;
     _busy = true;
     try {
       await gFFI.invokeMethod('check_service');
       await gFFI.serverModel.checkAndroidPermission();
+      final mediaReady = await gFFI.invokeMethod('9394_media_ready') == true;
+      if (!_attemptedMedia) {
+        _attemptedMedia = true;
+        // Start first; optional boot optimizations must not block capture authorization.
+        if (!mediaReady || !gFFI.serverModel.isStart) {
+          await gFFI.serverModel.startService();
+          return;
+        }
+      }
+      // Cancellation/stop never causes an automatic authorization request loop.
+      if (!mediaReady || !gFFI.serverModel.isStart) return;
       final inputReady = await gFFI.invokeMethod('9394_input_ready') == true;
       if (!inputReady && !_askedInput) {
         _askedInput = true;
@@ -65,17 +81,15 @@ class Bootstrap9394 extends WidgetsBindingObserver {
           return;
         }
       }
-      final autoStart = bind.mainGetLocalOption(key: '9394-auto-start');
-      if (autoStart != 'N' && !gFFI.serverModel.isStart && !_attemptedMedia &&
-          !await mainGetBoolOption(kOptionStopService)) {
-        _attemptedMedia = true;
-        await gFFI.serverModel.startService();
-      }
     } catch (error) {
       debugPrint('9394 startup failed: $error');
       showToast('启动未完成，请在屏幕共享页面检查系统授权并重试。');
     } finally {
       _busy = false;
+      if (_resumePending) {
+        _resumePending = false;
+        Future.microtask(_continueStartup);
+      }
     }
   }
 }
