@@ -1,8 +1,8 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.4，2026-10-19（Asia/Shanghai）
+- 版本：0.5，2026-10-19（Asia/Shanghai）
 - 仓库：https://github.com/hacxer/rustdesk
-- 状态：v0.4 armv7 已完成远程构建、V1/V2、旧证书一致性、ARM32 与 Android 7.1 静态校验，并提供下载。新包运行回归由用户手动执行，商米 T2 真机验收仍待完成。
+- 状态：用户已手动安装 v0.4 / build8；本轮已只读雷电及控制端日志，继续 v0.5 修复。普通 U 盘部署保留必要的一次系统确认；TUN 断连仍待分路径验证。商米 T2 真机验收未完成。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
 
 ## 1. 需求清单
@@ -316,3 +316,24 @@ P029 / 2026-10-19 静态分析范围扩展：Actions #7（39197097944）已确�
 - P019–P027 已按前文范围实现并编译，运行状态均为待用户复测。P026 为根据保留 native crash 添加的模拟器兼容路径，不以编译成功关闭崩溃。Android 系统授权仍按平台要求保留；商米 T2 仍待真机验收。
 
 P030 / 交付元数据文案：该次 build-manifest 的 requirements 描述仍为“v0.3 plus implementation records”，实际不可变 profile_sha 已包含本文 v0.4 及 P019–P029 的源码；该文案不影响 APK 内容或校验结果。先记录本文，再将生成器未来构建的需求标签改为 v0.4 with implementation records。本次 APK 字节和已验证摘要保持不变，不为纯描述文字重新编译产品；本节明确提供当前包与 v0.4 的实际来源对应关系。
+
+
+## 13. v0.5 用户覆盖安装反馈（先需求、后代码）
+
+2026-10-19：用户已自行安装 build8；助手仅使用现有 ADB 对指定雷电只读查询，以及读取当前控制端相关日志和路由摘要，不安装、启动、操作 APP，不清空日志，不修改 Clash/系统网络设置。用户随后明确选择“只有普通 U 盘安装，保留必要的一次系统确认”。该答复替代本轮最初希望静默代为同意系统授权的要求。
+
+| 需求 / 问题 | 目标与实施约定 | 验收标准 / 当前证据 |
+| --- | --- | --- |
+| R31 / P031 普通 U 盘部署授权 | 打开 APP 自动执行启动；已有有效 MediaProjection 自动使用，缺少或失效时只合并请求一个必要的系统确认，取消不自动循环。普通侧载 APK 不具备静默授予录屏、电池白名单或无障碍权限的能力，不伪造同意，不自动点击系统授权，不使用 root/appops/隐藏接口。不能承诺确认一次后跨进程、撤销或所有系统版本永久免确认 | 用户已接受必要的一次系统确认。持续有效会话返回 APP 不应重复申请；权限撤销、进程重建后按系统实际要求处理。保留可见服务与停止入口；Android14+不重用单次授权 token |
+| R32 / P032 电池优化确认 | 已获豁免时直接继续，不再弹窗；普通 APK 首次确实缺少时保留必要系统确认。记录本定制引导已请求状态，用户拒绝/取消后不因每次打开 APP 重复打扰，后续仍可手动通过开机设置或系统设置授予；不得把请求过等同于已获授权 | 当前雷电 deviceidle 白名单已包含应用，说明已获豁免，不需要继续请求。覆盖升级保留真实白名单与用户选择；拒绝场景应保留未获授权状态且不循环 |
+| R33 / P033 UDP 默认开启 | 显式 enable-udp-punch=Y，写 DEFAULT_LOCAL_SETTINGS；disable-udp=N，写 DEFAULT_SETTINGS。首次进入本轮配置执行一次同值迁移，以纠正当前截图中的 UDP 打洞关闭；旧设置无法可靠区分默认与用户选择，按本次明确要求只迁移一次，后续主动关闭必须保留。TCP/IPv6默认仍开，WebRTC不改变 | 初装、从build8覆盖安装均实际开启 UDP/UDP打洞；此后用户关闭再重启保持关闭；配置键、页面和运行读取一致。不能将 UDP 开关等同于 UDP 传输必定成功 |
+| R34 / P034 Clash TUN 下连接被关闭 | 分别验证直连、UDP、IPv6、中继，不把关闭 TUN 作为修复。先读取双方日志、路由和匹配规则；不通过 Android 默认强制所有连接中继、禁用 UDP/IPv6、降低认证或任意过滤私网网段掩盖问题 | 12:45–12:48 控制端对雷电私网目标报 is_local=true，TCP connect 很快完成、约5秒后 Reset by peer；Android 对应监听在18秒后超时且未进入认证。当前该目标实际选路 Mihomo，TUN gvisor/auto-route开启、route-exclude为空，已有私网 DIRECT 规则。因此重复添加 DIRECT 不能证明解决；优先验证 TUN开启 + ID/r 单次中继。具体TUN回环根因及修复仍开放，不能宣称 APK 已修好 |
+| R35 / P035 新包服务器/崩溃复核 | 区分旧崩溃、当前包和普通视频重建日志；仅发布脱敏摘要，不上传原始日志、设备标识、会话身份、Clash订阅或凭据 | 当前包15011008 / 1.5.0.9394，安装时间12:40:55；12:40/12:53指定服务器UDP注册响应、sysinfo updated，12:52及12:56经指定中继建立会话并启动VP8。13:01仍有服务器延迟响应。DropBox仅有02:32/02:58旧崩溃，无安装后新记录；12:53命中Android7 x86软件渲染。仅代表本次已观察区间未发现新崩溃，30分钟连续会话和T2真机仍待验收 |
+| R36 / P036 构建来源 | 未来清单需求标签改为 v0.5 with implementation records；只构建 armv7-signed.apk，保留 V1/V2、原证书、ELF32 ARM、minSdk22 和更高versionCode | 所有代码和构建均在GitHub；文档提交回读确认后才改代码，交付以实际profile_sha和最终校验为准 |
+
+### 本轮诊断解释与待验证项
+
+- 指定服务器已实际生效。API设备列表、ID注册、会话建立三者分别记录；未将模拟器缺少可用IPv6、视频分辨率变化引起的SWITCH或JNI警告当作崩溃证据。
+- TUN失败目标为模拟器NAT私网地址，另一Windows设备连接成功可能走中继或不同网络路径，不能据平台名称推断协议兼容问题。现有控制端为旧1.4.9，若其把TUN伪TCP建立误判为直连成功，Android APK无法单独更改电脑侧的路由和失败回退；需单次中继对照结果后决定控制端或TUN的精确修复范围。
+- 本轮先完成明确的UDP默认迁移、必要授权不重复引导以及构建元数据；TUN按真实证据保持开放。受管/商米系统预授权接口不在当前普通U盘部署条件内，不编造可用能力。
+- 平台依据：[Android MediaProjection](https://developer.android.com/media/grow/media-projection)、[Android Doze与电池豁免](https://developer.android.com/training/monitoring-device-state/doze-standby)。网络依据：[RustDesk force relay](https://github.com/rustdesk/rustdesk/wiki/FAQ#force-relay)、[Mihomo TUN配置](https://github.com/MetaCubeX/Meta-Docs/blob/main/docs/config/inbound/tun.en.md)。
