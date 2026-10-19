@@ -1,0 +1,454 @@
+name: 9394 additional ARM64 and Windows x64
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: custom-9394-additional-platforms
+  cancel-in-progress: false
+env:
+  RUST_VERSION: '1.75.0'
+  CARGO_BUILD_JOBS: '3'
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ece437c54f2a22da2e212b19ca2f84e8d45899fb
+          path: baseline
+          persist-credentials: false
+      - name: Checkout explicit upstream
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: rustdesk/rustdesk
+          ref: fada664df7a294d1d1a9ca3e7cd3637069122f17
+          path: upstream
+          submodules: recursive
+          persist-credentials: false
+      - name: Prepare reviewed source
+        run: |
+          python3 -m py_compile scripts/custom-9394/prepare.py scripts/custom-9394/verify.py
+          python3 baseline/scripts/custom-9394/prepare.py upstream
+          python3 scripts/custom-9394/platforms.py arm64-verifier
+          git -C upstream diff --check
+          mkdir -p dist
+          python3 verify-arm64-generated.py manifest
+      - name: Install remote prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake curl gcc-multilib g++-multilib libclang-dev libgtk-3-dev libasound2-dev libpulse-dev libxdo-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxfixes-dev libva-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev llvm-dev nasm ninja-build pkg-config openjdk-17-jdk-headless
+      - name: Install pinned Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+          targets: aarch64-linux-android
+      - name: Validate locked dependencies
+        working-directory: upstream
+        run: |
+          cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
+          rustfmt --edition 2021 src/custom_9394.rs
+      - name: Test legacy audit acknowledgment
+        run: |
+          mkdir -p "$RUNNER_TEMP/9394-audit-check/src"
+          cp scripts/custom-9394/source/audit_ack_9394.rs "$RUNNER_TEMP/9394-audit-check/src/lib.rs"
+          cp upstream/Cargo.lock "$RUNNER_TEMP/9394-audit-check/Cargo.lock"
+          cat > "$RUNNER_TEMP/9394-audit-check/Cargo.toml" <<'EOF'
+          [package]
+          name = "custom-9394-audit-check"
+          version = "0.1.0"
+          edition = "2021"
+          [dependencies]
+          serde_json = "=1.0.118"
+          EOF
+          cargo test --manifest-path "$RUNNER_TEMP/9394-audit-check/Cargo.toml"
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          workspaces: upstream -> target
+          prefix-key: custom9394-aarch64-rust175
+          cache-on-failure: true
+      - name: Flutter for bridge generation
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.22.3'
+          cache: true
+      - name: Generate upstream bridge
+        working-directory: upstream
+        run: |
+          cargo install cargo-expand --version 1.0.95 --locked
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid --locked
+          cp flutter/pubspec.yaml "$RUNNER_TEMP/pubspec.yaml"
+          sed -i 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+          (cd flutter && flutter pub get)
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp "$RUNNER_TEMP/pubspec.yaml" flutter/pubspec.yaml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extra-bridge-${{ github.run_id }}
+          path: |
+            upstream/src/bridge_generated.rs
+            upstream/src/bridge_generated.io.rs
+            upstream/flutter/lib/generated_bridge.dart
+            upstream/flutter/lib/generated_bridge.freezed.dart
+            upstream/flutter/macos/Runner/bridge_generated.h
+          if-no-files-found: error
+  android:
+    needs: bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ece437c54f2a22da2e212b19ca2f84e8d45899fb
+          path: baseline
+          persist-credentials: false
+      - name: Checkout explicit upstream
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: rustdesk/rustdesk
+          ref: fada664df7a294d1d1a9ca3e7cd3637069122f17
+          path: upstream
+          submodules: recursive
+          persist-credentials: false
+      - name: Preflight original signing key and preset password
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD RUSTDESK_PRESET_PASSWORD; do
+            if [ -z "$(printenv "$name")" ]; then echo "::error::Required secret missing: $name"; exit 1; fi
+          done
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rustdesk-9394.keystore"
+          printf '%s  %s\n' d88572222dbe472b4b191bd9734859e27bcd115f06a2b711eec193b4c29d0d91 "$RUNNER_TEMP/rustdesk-9394.keystore" | sha256sum -c -
+          keytool -list -keystore "$RUNNER_TEMP/rustdesk-9394.keystore" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS"
+      - name: Prepare reviewed source
+        run: |
+          python3 -m py_compile scripts/custom-9394/prepare.py scripts/custom-9394/verify.py
+          python3 baseline/scripts/custom-9394/prepare.py upstream
+          python3 scripts/custom-9394/platforms.py arm64-verifier
+          git -C upstream diff --check
+          mkdir -p dist
+          python3 verify-arm64-generated.py manifest
+      - name: Install remote prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake curl gcc-multilib g++-multilib libclang-dev libgtk-3-dev libasound2-dev libpulse-dev libxdo-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxfixes-dev libva-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev llvm-dev nasm ninja-build pkg-config openjdk-17-jdk-headless
+      - name: Install pinned Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+          targets: aarch64-linux-android
+      - name: Validate locked dependencies
+        working-directory: upstream
+        run: |
+          cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
+          rustfmt --edition 2021 src/custom_9394.rs
+      - name: Test legacy audit acknowledgment
+        run: |
+          mkdir -p "$RUNNER_TEMP/9394-audit-check/src"
+          cp scripts/custom-9394/source/audit_ack_9394.rs "$RUNNER_TEMP/9394-audit-check/src/lib.rs"
+          cp upstream/Cargo.lock "$RUNNER_TEMP/9394-audit-check/Cargo.lock"
+          cat > "$RUNNER_TEMP/9394-audit-check/Cargo.toml" <<'EOF'
+          [package]
+          name = "custom-9394-audit-check"
+          version = "0.1.0"
+          edition = "2021"
+          [dependencies]
+          serde_json = "=1.0.118"
+          EOF
+          cargo test --manifest-path "$RUNNER_TEMP/9394-audit-check/Cargo.toml"
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          workspaces: upstream -> target
+          prefix-key: custom9394-aarch64-rust175
+          cache-on-failure: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: extra-bridge-${{ github.run_id }}
+          path: upstream/
+      - name: Flutter for Android
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.24.5'
+          cache: true
+      - name: Analyze Android startup
+        working-directory: upstream
+        run: |
+          FLUTTER_ROOT=$(dirname "$(dirname "$(command -v flutter)")")
+          SDK_PATCH="$GITHUB_WORKSPACE/upstream/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          if git -C "$FLUTTER_ROOT" apply --check "$SDK_PATCH"; then
+            git -C "$FLUTTER_ROOT" apply "$SDK_PATCH"
+            echo 'Flutter SDK patch applied'
+          elif git -C "$FLUTTER_ROOT" apply --reverse --check "$SDK_PATCH"; then
+            echo 'Flutter SDK patch already present; reverse check passed'
+          else
+            echo '::error::Flutter SDK patch matches neither clean nor patched state'
+            exit 1
+          fi
+          cd flutter
+          flutter pub get
+          dart format lib/mobile/bootstrap_9394.dart
+          flutter analyze --no-pub lib/mobile/bootstrap_9394.dart
+          flutter analyze --no-pub --no-fatal-infos lib/models/server_model.dart lib/mobile/pages/server_page.dart
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        id: ndk
+        with:
+          ndk-version: r28c
+          add-to-path: true
+      - name: Set NDK paths
+        run: |
+          echo 'ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}' >> "$GITHUB_ENV"
+          echo 'ANDROID_NDK_ROOT=${{ steps.ndk.outputs.ndk-path }}' >> "$GITHUB_ENV"
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+      - name: Build aarch64 native dependencies
+        working-directory: upstream
+        run: bash flutter/build_android_deps.sh arm64-v8a
+      - name: Build aarch64 Rust library
+        working-directory: upstream
+        env:
+          RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
+        run: |
+          cargo install cargo-ndk --version 3.1.2 --locked
+          bash flutter/ndk_arm64.sh
+          mkdir -p flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp target/aarch64-linux-android/release/liblibrustdesk.so flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+          cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" flutter/android/app/src/main/jniLibs/arm64-v8a/
+      - name: Build 64-bit APK
+        working-directory: upstream/flutter
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          export PATH="$JAVA_HOME/bin:$PATH"
+          sed -i 's/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/' android/gradle.properties
+          flutter build apk --release --target-platform android-arm64 --split-per-abi --build-name "$BUILD_NAME" --build-number 15011009
+      - name: Sign V1 and V2 with original certificate
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/zipalign" -f -p 4 upstream/flutter/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$RUNNER_TEMP/aligned.apk"
+          "$BUILD_TOOLS/apksigner" sign --ks "$RUNNER_TEMP/rustdesk-9394.keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD --v1-signing-enabled true --v2-signing-enabled true --out dist/aarch64-signed.apk "$RUNNER_TEMP/aligned.apk"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs dist/aarch64-signed.apk | tee dist/signature-verification.txt
+          grep -Fq 'Verified using v1 scheme (JAR signing): true' dist/signature-verification.txt
+          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' dist/signature-verification.txt
+          "$BUILD_TOOLS/zipalign" -c -p 4 dist/aarch64-signed.apk
+          curl --fail --location --retry 3 'https://github.com/hacxer/rustdesk/releases/download/v1.4.9-custom-9394/rustdesk-1.4.9-aarch64-signed-9394.apk' --output "$RUNNER_TEMP/previous.apk"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/previous.apk" 2>&1 | tee "$RUNNER_TEMP/previous-cert.txt"
+          cp "$RUNNER_TEMP/previous-cert.txt" dist/previous-cert.txt
+          "$BUILD_TOOLS/aapt" dump badging dist/aarch64-signed.apk 2>&1 | tee dist/apk-badging.txt
+          python3 verify-arm64-generated.py apk
+          python3 scripts/custom-9394/platforms.py finish-arm64
+          echo '### Signed aarch64 verified; SUNMI T2 device validation PENDING' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: verified-extra-aarch64-${{ github.run_id }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload non-secret diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: aarch64-diagnostics-${{ github.run_number }}
+          path: |
+            dist/build-manifest.json
+            dist/*.txt
+            upstream/custom-9394-changes.json
+          if-no-files-found: ignore
+      - name: Remove temporary signing files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/rustdesk-9394.keystore" "$RUNNER_TEMP/previous.apk" "$RUNNER_TEMP/aligned.apk"
+  windows:
+    needs: bridge
+    runs-on: windows-2022
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: upstream
+        shell: pwsh
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ece437c54f2a22da2e212b19ca2f84e8d45899fb
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: rustdesk/rustdesk
+          ref: fada664df7a294d1d1a9ca3e7cd3637069122f17
+          path: upstream
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: rustdesk-org/RustDeskTempTopMostWindow
+          ref: ecd8d6a139eee76845ea66423fb739af450fda90
+          path: topmost
+          persist-credentials: false
+      - name: Prepare same profile and Windows entry points
+        working-directory: .
+        run: |
+          python -m py_compile scripts/custom-9394/platforms.py scripts/custom-9394/publish-extra.py
+          python baseline/scripts/custom-9394/prepare.py upstream
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/custom-9394/platforms.py prepare-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C upstream diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: extra-bridge-${{ github.run_id }}
+          path: upstream/
+      - uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+        with:
+          version: '15.0.6'
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        id: flutter
+        with:
+          flutter-version: '3.24.5'
+          architecture: x64
+          cache: true
+      - name: Prepare reviewed Flutter engine and SDK patch
+        env:
+          FLUTTER_CACHE_PATH: ${{ steps.flutter.outputs.CACHE-PATH }}
+        run: |
+          flutter precache --windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile engine.zip
+          Expand-Archive -LiteralPath engine.zip -DestinationPath engine
+          Copy-Item engine/* "$env:FLUTTER_CACHE_PATH/bin/cache/artifacts/engine/windows-x64-release/" -Recurse -Force
+          $patch = (Resolve-Path .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff).Path
+          git -C $env:FLUTTER_CACHE_PATH apply --check $patch
+          if ($LASTEXITCODE -eq 0) {
+            git -C $env:FLUTTER_CACHE_PATH apply $patch
+          } else {
+            git -C $env:FLUTTER_CACHE_PATH apply --reverse --check $patch
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          (Get-FileHash engine.zip -Algorithm SHA256).Hash | Set-Content engine-sha256.txt
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          workspaces: upstream -> target
+          prefix-key: custom9394-windows175
+          cache-on-failure: true
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:/vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          doNotCache: false
+      - name: Build locked native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+      - name: Build privacy helper
+        working-directory: topmost
+        run: |
+          msbuild WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build Flutter Windows bundle
+        env:
+          RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
+        run: |
+          if (-not $env:RUSTDESK_PRESET_PASSWORD) { throw 'Preset password secret missing' }
+          python build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item flutter/build/windows/x64/runner/Release rustdesk
+          Copy-Item ../topmost/WindowInjection/x64/Release/WindowInjection.dll rustdesk/
+          $runnerRes = Get-ChildItem flutter/build/windows -Filter Runner.res -Recurse | Select-Object -First 1
+          if ($runnerRes) { Copy-Item $runnerRes.FullName libs/portable/Runner.res }
+      - name: Pack complete self-extracting executable
+        run: |
+          python -m pip install -r libs/portable/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifestPath = 'res/manifest.xml'
+          $manifest = Get-Content -LiteralPath $manifestPath
+          $manifest | Where-Object { $_ -notmatch 'dpiAware' } | Set-Content -LiteralPath $manifestPath
+          Push-Location libs/portable
+          python generate.py -f ../../rustdesk -o . -e ../../rustdesk/rustdesk.exe -l 6
+          $packExit = $LASTEXITCODE
+          Pop-Location
+          if ($packExit -ne 0) { exit $packExit }
+          New-Item -ItemType Directory -Force ../dist | Out-Null
+          Copy-Item target/release/rustdesk-portable-packer.exe ../dist/x86_64.exe
+          $sig = Get-AuthenticodeSignature ../dist/x86_64.exe
+          if ($sig.Status -ne 'NotSigned') { throw "Unexpected Authenticode state: $($sig.Status)" }
+      - name: Verify architecture, bundle and embedded configuration
+        working-directory: .
+        run: |
+          python scripts/custom-9394/platforms.py verify-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Version smoke test without installation
+        run: |
+          $process = Start-Process -FilePath (Resolve-Path rustdesk/rustdesk.exe).Path -ArgumentList '--version' -WindowStyle Hidden -PassThru
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Version command timed out' }
+          if ($process.ExitCode -ne 0) { throw "Version command failed: $($process.ExitCode)" }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: verified-extra-windows-${{ github.run_id }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: failure()
+        with:
+          name: windows-extra-diagnostics-${{ github.run_id }}
+          path: |
+            upstream/engine-sha256.txt
+            upstream/custom-9394-changes.json
+            dist/*.json
+          if-no-files-found: ignore
+  publish:
+    needs: [android, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: verified-extra-*-${{ github.run_id }}
+          path: dist/
+          merge-multiple: true
+      - name: Verify and append both platforms to formal release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/custom-9394/publish-extra.py
