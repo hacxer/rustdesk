@@ -15,5 +15,6 @@
   "enable-tcp-punch": "Y",
   "enable-ipv6-punch": "Y",
   "enable-check-update": "N",
-  "show-scam-warning": "N"
+  "show-scam-warning": "N",
+  "allow-websocket": "N"
 }
