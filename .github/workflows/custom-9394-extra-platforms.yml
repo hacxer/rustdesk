@@ -308,7 +308,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
-          git config --global core.whitespace blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+          git config --global core.whitespace 'blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol'
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
