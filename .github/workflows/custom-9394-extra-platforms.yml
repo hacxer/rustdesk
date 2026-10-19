@@ -1,17 +1,24 @@
 name: 9394 additional ARM64 and Windows x64
 on:
   workflow_dispatch:
+    inputs:
+      resume_android_run:
+        description: Reuse verified ARM64 and bridge artifacts from this run; blank for full build
+        type: string
+        required: false
+        default: ''
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: custom-9394-additional-platforms
+  group: custom-9394-additional-platforms-${{ inputs.resume_android_run || 'full' }}
   cancel-in-progress: false
 env:
   RUST_VERSION: '1.75.0'
   CARGO_BUILD_JOBS: '3'
 jobs:
   bridge:
+    if: inputs.resume_android_run == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -99,6 +106,7 @@ jobs:
             upstream/flutter/macos/Runner/bridge_generated.h
           if-no-files-found: error
   android:
+    if: inputs.resume_android_run == ''
     needs: bridge
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -282,6 +290,7 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/rustdesk-9394.keystore" "$RUNNER_TEMP/previous.apk" "$RUNNER_TEMP/aligned.apk"
   windows:
+    if: ${{ always() && (needs.bridge.result == 'success' || inputs.resume_android_run != '') }}
     needs: bridge
     runs-on: windows-2022
     timeout-minutes: 180
@@ -290,12 +299,16 @@ jobs:
         working-directory: upstream
         shell: pwsh
     env:
+      PYTHONUTF8: '1'
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
     steps:
       - name: Preserve exact configuration bytes
         working-directory: .
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.whitespace blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
@@ -321,6 +334,9 @@ jobs:
         working-directory: .
         run: |
           python -m py_compile scripts/custom-9394/platforms.py scripts/custom-9394/publish-extra.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/custom-9394/platforms.py normalize-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python baseline/scripts/custom-9394/prepare.py upstream
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/custom-9394/platforms.py prepare-windows
@@ -329,7 +345,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: extra-bridge-${{ github.run_id }}
+          name: extra-bridge-${{ inputs.resume_android_run || github.run_id }}
+          run-id: ${{ inputs.resume_android_run || github.run_id }}
+          github-token: ${{ github.token }}
           path: upstream/
       - uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
         with:
@@ -436,6 +454,7 @@ jobs:
             dist/*.json
           if-no-files-found: ignore
   publish:
+    if: ${{ always() && needs.windows.result == 'success' && (needs.android.result == 'success' || inputs.resume_android_run != '') }}
     needs: [android, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -448,10 +467,16 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: verified-extra-*-${{ github.run_id }}
+          name: verified-extra-windows-${{ github.run_id }}
           path: dist/
-          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: verified-extra-aarch64-${{ inputs.resume_android_run || github.run_id }}
+          run-id: ${{ inputs.resume_android_run || github.run_id }}
+          github-token: ${{ github.token }}
+          path: dist/
       - name: Verify and append both platforms to formal release
         env:
           GH_TOKEN: ${{ github.token }}
+          ANDROID_SOURCE_RUN: ${{ inputs.resume_android_run || github.run_id }}
         run: python3 scripts/custom-9394/publish-extra.py
