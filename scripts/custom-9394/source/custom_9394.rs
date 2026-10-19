@@ -6,10 +6,11 @@ use std::{collections::HashMap, sync::Once};
 
 static INITIALIZE: Once = Once::new();
 const PROFILE_MARKER: &str = "9394-profile-v2";
+const UDP_MARKER: &str = "9394-udp-defaults-v1";
 const PASSWORD_MARKER: &str = "9394-password-initialized-v1";
 const SERVER_KEYS: [&str; 4] = ["custom-rendezvous-server", "relay-server", "api-server", "key"];
-const LOCAL_KEYS: [&str; 4] = [
-    "enable-tcp-punch", "enable-ipv6-punch", "enable-check-update", "show-scam-warning",
+const LOCAL_KEYS: [&str; 5] = [
+    "enable-tcp-punch", "enable-udp-punch", "enable-ipv6-punch", "enable-check-update", "show-scam-warning",
 ];
 
 pub fn initialize() {
@@ -47,6 +48,13 @@ pub fn initialize() {
             LocalConfig::set_option("enable-check-update".into(), "N".into());
             LocalConfig::set_option("show-scam-warning".into(), "N".into());
             LocalConfig::set_option(PROFILE_MARKER.into(), "Y".into());
+        }
+        // P033: one explicit upgrade migration; later user choices stay editable.
+        // Keep this separate from v2 so servers, WebSocket and update settings are not reset.
+        if LocalConfig::get_option(UDP_MARKER) != "Y" {
+            LocalConfig::set_option("enable-udp-punch".into(), "Y".into());
+            Config::set_option("disable-udp".into(), "N".into());
+            LocalConfig::set_option(UDP_MARKER.into(), "Y".into());
         }
         if LocalConfig::get_option(PASSWORD_MARKER) != "Y" {
             let initialized = if Config::has_permanent_password() {
