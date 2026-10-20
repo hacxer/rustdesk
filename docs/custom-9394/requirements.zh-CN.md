@@ -1,8 +1,8 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.7，2026-10-20（Asia/Shanghai；新增平台完成）
+- 版本：0.8，2026-10-20（Asia/Shanghai；新增Windows x86 Sciter）
 - 仓库：https://github.com/hacxer/rustdesk
-- 状态：v0.7 ARM64与Windows x64已校验并追加至原正式版，使用原build9上游与公开配置；ARM32原包不变。安装人员预配置方案不变，T2及新增平台完整设备验收仍待完成。
+- 状态：v0.7三平台已发布；v0.8新增Windows 32位Sciter构建中，沿用build9配置，原附件不变。T2及新增平台完整设备验收仍待完成。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
 
 ## 1. 需求清单
@@ -475,3 +475,14 @@ ARM64 artifact上传6个文件，比五项发布正文多一个签名辅助文�
 两平台清单均匹配基准profile ece437c54f2a22da2e212b19ca2f84e8d45899fb、上游fada664df7a294d1d1a9ca3e7cd3637069122f17与公开配置摘要90e2e177cbca2bf4553a1d1f544c7fc57eed84894cf6f74fea20b729be2f1ffd。ARM32摘要仍为2447958f38f0e6967343fd55ea25c229d608915e830c7c0059b206f1974e6b77。每个平台实际来源与仅执行上传的发布任务分别记录，未把重试/发布提交冒充原构建。
 
 附件新增aarch64与Windows独立manifest、摘要与校验报告，以及SHA256SUMS-extra；总计15个上传附件，另有GitHub自动生成的两项源码归档。Windows无代码签名证书、安装后服务/重启及新增平台完整远控仍待设备验收；T2继续使用ARM32并按原清单验收，不能将ARM64或编译成功代替T2实测。全程源码、编译、签名、打包和上传均在GitHub完成。
+
+
+## 20. v0.8 / R46 Windows x86 Sciter版（先需求、后实现）
+
+用户要求再生成x86-sciter.exe，沿用当前正式版本的服务器、公钥、默认选项及Secret注入固定密码。目标为i686-pc-windows-msvc的Windows 32位Sciter UI完整自解压客户端，不得用x64 Flutter包改名。采用同一冻结上游fada664df7a294d1d1a9ca3e7cd3637069122f17、hbb_common229b904508364c8997aad0fb5af57effac859f60、build9 profile ece437c54f2a22da2e212b19ca2f84e8d45899fb及公开配置SHA-256 90e2e177cbca2bf4553a1d1f544c7fc57eed84894cf6f74fea20b729be2f1ffd。
+
+- Sciter使用上游legacy UI及对应x86 Rust/Sciter适配，不切换产品配置；沿用Windows核心/服务初始化、只手动刷新临时密码和原有登录限流。初始化模块与公开配置必须核对相同摘要；保留已有非空服务器、自定义密码和用户后续选择。安装后自动服务沿用上游，便携运行不自动安装服务。
+- 工具链按冻结上游Sciter CI：Windows2022、i686 MSVC nightly-2023-10-13、32位LLVM15.0.6、x86-windows-static依赖；sciter-rs固定上游x86补丁674e07d3066ca9a92ced3816203ab6b652629d1e，运行时Sciter DLL记录真实来源提交和摘要，不依赖未记录的浮动文件。
+- 发布前校验主程序、Sciter运行库及自解压外壳PE I386/PE32；完整内嵌UI、配置和打包payload摘要；在GitHub runner完成不安装的版本/启动冒烟。虚拟显示如含上游x64辅助驱动文件，单独列出用途，不误判为x86主程序。未提供Windows签名证书，明确Authenticode未签名。
+- 追加同一正式Release v1.5.0-9394-build9，保留原标签、Latest/正式状态与全部既有附件ID、大小和摘要；不覆盖同名不同内容文件。新增独立manifest、SHA256和校验报告，准确记录新构建run和扩展提交。全部源码编辑、编译、打包及上传在GitHub完成，本地不安装构建工具或运行新EXE。
+- Sciter界面属上游旧版，不能承诺与Flutter所有菜单功能完全一致；Windows32位/64位实际远控、输入、剪贴板、安装服务与重启及老系统兼容仍待设备验收，不以PE32或GitHub构建通过替代实测。每次失败先在本节记录原因与验收修订，再改脚本重试。
