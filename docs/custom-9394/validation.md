@@ -235,3 +235,19 @@ AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测�
 | 设备运行 | ARM64真实设备、Windows安装后服务/重启和完整远控、30分钟稳定性未执行；T2仍待真机验收 |
 
 直接下载：[aarch64-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/aarch64-signed.apk)、[x86_64.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86_64.exe)。两平台独立清单、报告与SHA256SUMS-extra均位于同一Release。原ARM32包及文档中的安装人员预配置、用户设置保留约定不变。
+
+
+## v0.8 Windows x86 Sciter 验收（新增）
+
+沿用build9公开配置、核心初始化及手动刷新临时密码行为，增加独立x86 Sciter构建；原三平台附件不变。构建/PE32/完整包及发布校验结果将在完成后补录，下列实际设备项目目前均待验收：
+
+| 项目 | 结果与通过条件 |
+| --- | --- |
+| 32位/64位Windows实际启动 | 待验收；Sciter页面能显示，首次运行及重复启动无崩溃 |
+| 服务器与密码 | 待验收；ID/中继/API/公钥正确；纯数字密码仅手动刷新；固定密码初始化后用户修改不被还原 |
+| 远控会话 | 待验收；画面、鼠标/键盘、剪贴板与文件传输，30分钟稳定 |
+| 安装与服务 | 待验收；完成标准安装后服务自动启动，重启后可连接；便携运行不能代替安装 |
+| 已有配置与升级 | 待验收；同配置目录中的服务器/密码/后续选项不被启动重置 |
+| 老Windows兼容 | 待验收；不能仅据x86/Sciter宣称Windows7等旧系统已支持 |
+
+未提供Windows代码签名证书，x86-sciter.exe按Authenticode未签名交付。GitHub runner静态检查与版本命令冒烟不等于上述设备项目通过。
