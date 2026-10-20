@@ -239,7 +239,7 @@ AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测�
 
 ## v0.8 Windows x86 Sciter 验收（新增）
 
-沿用build9公开配置、核心初始化及手动刷新临时密码行为，增加独立x86 Sciter构建；原三平台附件不变。构建/PE32/完整包及发布校验结果将在完成后补录，下列实际设备项目目前均待验收：
+沿用build9公开配置、核心初始化及手动刷新临时密码行为，增加独立x86 Sciter构建；原三平台附件不变。构建/PE32/完整包及发布校验已通过（见下方交付记录），下列实际设备项目目前均待验收：
 
 | 项目 | 结果与通过条件 |
 | --- | --- |
@@ -251,3 +251,13 @@ AOSP7.1存在记住投屏许可的路径，但不能代替商米T2固件实测�
 | 老Windows兼容 | 待验收；不能仅据x86/Sciter宣称Windows7等旧系统已支持 |
 
 未提供Windows代码签名证书，x86-sciter.exe按Authenticode未签名交付。GitHub runner静态检查与版本命令冒烟不等于上述设备项目通过。
+
+
+### v0.8 Sciter构建与交付验证通过（2026-10-20 11:11）
+
+- [run39360221285](https://github.com/hacxer/rustdesk/actions/runs/39360221285) build118424430116、publish118433227249均success；扩展350cb6e7e2ea34ea7a5534e2712cacf2eb9b3931，基准profile ece437c54f2a22da2e212b19ca2f84e8d45899fb、上游fada664df7a294d1d1a9ca3e7cd3637069122f17及公开配置90e2e177cbca2bf4553a1d1f544c7fc57eed84894cf6f74fea20b729be2f1ffd一致。
+- i686 nightly工具链、LLVM32、x86静态依赖、Sciter编译与完整打包成功。主程序、Sciter DLL和外壳I386/PE32通过，内嵌UI生成文件存在；data.bin已实际嵌入外壳，逐项Brotli解压结果与原bundle一致，MD5与SHA-256通过；辅助AMD64驱动/安装器仅在usbmmidd_v2中按上游用途列明。
+- 版本命令在GitHub Windows runner中隐藏执行并退出0；Authenticode为NotSigned，未安装服务。真实远控与旧Windows兼容等上方设备清单全部保持待验收。
+- [x86-sciter.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter.exe)：15,217,152字节；SHA-256 a9eb897532e189d2c1f16300f566fc6f210092dbdfe942b9cb6950643576a3e4；Release asset ID658121608，uploaded，服务端摘要一致。
+- [manifest](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter-build-manifest.json)、[验证JSON](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter-validation.json)、[摘要文件](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter-SHA256SUMS)已发布。verified artifact12238395326的ZIP14,789,250字节，ZIP SHA-256 dbb981c201a3d033285227034f180a966ff92149549bc7d84b6bb2480a9b86e7。
+- 原正式Release417427248、标签目标及15项旧上传附件ID/大小/摘要全部保持；新增4项服务端状态/大小/摘要验证通过；正式Latest，非草稿、非预发布。本次仅增加Sciter版，不重编译旧三平台，不将编译检查冒充商米T2或Windows完整实机验收。
