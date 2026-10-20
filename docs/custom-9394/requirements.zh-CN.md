@@ -486,3 +486,8 @@ ARM64 artifact上传6个文件，比五项发布正文多一个签名辅助文�
 - 发布前校验主程序、Sciter运行库及自解压外壳PE I386/PE32；完整内嵌UI、配置和打包payload摘要；在GitHub runner完成不安装的版本/启动冒烟。虚拟显示如含上游x64辅助驱动文件，单独列出用途，不误判为x86主程序。未提供Windows签名证书，明确Authenticode未签名。
 - 追加同一正式Release v1.5.0-9394-build9，保留原标签、Latest/正式状态与全部既有附件ID、大小和摘要；不覆盖同名不同内容文件。新增独立manifest、SHA256和校验报告，准确记录新构建run和扩展提交。全部源码编辑、编译、打包及上传在GitHub完成，本地不安装构建工具或运行新EXE。
 - Sciter界面属上游旧版，不能承诺与Flutter所有菜单功能完全一致；Windows32位/64位实际远控、输入、剪贴板、安装服务与重启及老系统兼容仍待设备验收，不以PE32或GitHub构建通过替代实测。每次失败先在本节记录原因与验收修订，再改脚本重试。
+
+
+### P047 新版Rustup拦截旧i686 host工具链
+
+首次Sciter任务39359619230在安装工具链阶段失败：rustup提示nightly-2023-10-13-i686-pc-windows-msvc may not be able to run on this system，并要求--force-non-host。配置准备及32位LLVM已通过，尚未编译客户端。GitHub Windows2022 runner为64位、可通过WOW64运行32位程序；保持上游指定的i686编译器及版本，改用显式rustup toolchain install --force-non-host，再选择该已安装工具链并打印rustc详细版本。该选项只允许安装交叉host工具链，不关闭产品安全检查、不更换依赖或服务器参数。重试必须实际运行i686 rustc成功并继续PE32/完整包校验。
