@@ -56,11 +56,13 @@ jobs:
         with:
           version: '15.0.6'
       - name: Install pinned x86 Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
-        with:
-          toolchain: nightly-2023-10-13-i686-pc-windows-msvc
-          targets: i686-pc-windows-msvc
-          components: rustfmt
+        run: |
+          rustup toolchain install nightly-2023-10-13-i686-pc-windows-msvc --target i686-pc-windows-msvc --component rustfmt --profile minimal --no-self-update --force-non-host
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default nightly-2023-10-13-i686-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustc --version --verbose
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
           workspaces: upstream -> target
