@@ -59,7 +59,7 @@ jobs:
         run: |
           rustup toolchain install nightly-2023-10-13-i686-pc-windows-msvc --target i686-pc-windows-msvc --component rustfmt --profile minimal --no-self-update --force-non-host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          rustup default nightly-2023-10-13-i686-pc-windows-msvc
+          rustup default nightly-2023-10-13-i686-pc-windows-msvc --force-non-host
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           rustc --version --verbose
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
