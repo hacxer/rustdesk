@@ -1,14 +1,15 @@
 # RustDesk 9394 GitHub 构建入口
 
-**当前正式版：[v1.5.0-9394-build9 / Latest](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。2026-10-20已补齐ARM64与Windows x64。**
+**当前正式版：[v1.5.0-9394-build9 / Latest](https://github.com/hacxer/rustdesk/releases/tag/v1.5.0-9394-build9)。2026-10-20已补齐ARM64、Windows x64及Windows x86 Sciter。**
 
 | 平台 | 直接下载 | 校验说明 |
 | --- | --- | --- |
 | Android ARM32 | [armv7-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/armv7-signed.apk) | 原build9不变；V1/V2及原证书，15011009；T2真机待验收 |
 | Android ARM64 | [aarch64-signed.apk](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/aarch64-signed.apk) | ELF64 AArch64、V1/V2及原证书；实际versionCode15013009 |
 | Windows x64 | [x86_64.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86_64.exe) | AMD64完整Flutter自解压包；Authenticode未签名 |
+| Windows x86 Sciter | [x86-sciter.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter.exe) | I386/PE32完整Sciter自解压包；Authenticode未签名 |
 
-三平台使用相同固定上游与build9公开配置。新增两包分别记录实际构建run和扩展提交，校验摘要、独立manifest及报告见Release附件，详细记录见validation.md。Android按下方清单由安装人员交付前配置；Windows需完成上游安装流程才具备安装后的自动服务。新增平台完整设备运行、安装后重启及30分钟稳定性仍待验收。下方Actions ZIP为原构建归档入口。
+四个平台使用相同固定上游与build9公开配置。新增包分别记录实际构建run和扩展提交，校验摘要、独立manifest及报告见Release附件，详细记录见validation.md。Android按下方清单由安装人员交付前配置；Windows需完成上游安装流程才具备安装后的自动服务。新增平台完整设备运行、安装后重启及30分钟稳定性仍待验收。下方Actions ZIP为原构建归档入口。
 
 - [需求与问题记录](requirements.zh-CN.md)
 - [构建及设备验收](validation.md)
@@ -32,7 +33,7 @@
 
 更新前先修改需求/问题记录及来源版本，再调整适配，先单独构建并验收 armv7；同一批次的其他平台必须使用相同的上游真实 SHA 和配置。定制适配保存在本仓库独立文件中，无需在本地安装 Rust、Flutter 或 Android 构建工具。
 
-armv7已按用户明确授权正式发布，T2真机验收仍待完成。v0.7已新增ARM64及Windows x64扩展工作流，并按相同固定上游与build9配置完成校验、追加同一正式版；来源和验收范围见validation.md。自动升级PR入口尚未实施，没有启用定时任务。
+armv7已按用户明确授权正式发布，T2真机验收仍待完成。v0.7新增ARM64及Windows x64，v0.8新增Windows x86 Sciter；均按相同固定上游与build9配置完成构建校验，追加同一正式版。来源和验收范围见validation.md。自动升级PR入口尚未实施，没有启用定时任务。
 
 2026-10-19：按用户要求，APK 安装与雷电模拟器运行测试由用户手动完成；[验收清单](validation.md)包含首次授权、自动服务、认证与远控功能检查。本轮助手完成 GitHub 打包和静态校验后提供交付 artifact 链接。
 
@@ -100,3 +101,12 @@ UDP打洞原默认关闭的源码依据：自建服务器下get_local_option在e
 T2固件是否保存跨重启投屏许可必须实测。如果安装人员已勾选并同意后仍重复弹窗，记录具体固件、操作步骤及发生时刻，先补充需求问题记录，再读取脱敏日志决定修复；该设备不标记“交付后免重复授权通过”。必要时再核实商米官方预授权能力。普通APK不自行代点系统按钮或伪造授权。
 
 当前状态：方案A已确认，安装人员执行与T2真机验收待完成。build9已通过ARM32、V1/V2及原签名静态检查；本节不表示首次静默授权或T2运行验收已通过。
+
+
+## v0.8 Windows x86 Sciter 下载与构建
+
+[x86-sciter.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter.exe)为Windows32位Sciter旧版UI完整自解压客户端，15,217,152字节，SHA-256：a9eb897532e189d2c1f16300f566fc6f210092dbdfe942b9cb6950643576a3e4。主程序、Sciter DLL与外壳均PE32/I386，内嵌文件逐项核验及版本命令冒烟通过；Authenticode未签名。界面与Flutter有所不同，旧Windows兼容及真实远控、安装后服务/重启仍待设备验收。便携运行不等于安装开机服务。
+
+[成功构建与发布39360221285](https://github.com/hacxer/rustdesk/actions/runs/39360221285)，来源扩展350cb6e7e2ea34ea7a5534e2712cacf2eb9b3931，沿用build9上游、配置及共用初始化。独立manifest、SHA256及验证JSON见同一Release附件；原ARM32、ARM64及Windows x64附件不变。
+
+后续手动构建入口：[9394 Windows x86 Sciter package](https://github.com/hacxer/rustdesk/actions/workflows/custom-9394-x86-sciter.yml)。同名已发布包若摘要不同，发布步骤会拒绝覆盖；新迭代先更新需求并规划新版本/文件名，不强行覆盖正式包。
