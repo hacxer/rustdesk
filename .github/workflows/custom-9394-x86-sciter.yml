@@ -1,0 +1,159 @@
+name: 9394 Windows x86 Sciter package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: custom-9394-x86-sciter
+  cancel-in-progress: false
+env:
+  PYTHONUTF8: '1'
+  CARGO_BUILD_JOBS: '3'
+  VCPKG_DEFAULT_TRIPLET: x86-windows-static
+  VCPKG_DEFAULT_HOST_TRIPLET: x86-windows-static
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: upstream
+    steps:
+      - name: Preserve exact profile bytes
+        working-directory: .
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.whitespace 'blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol'
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ece437c54f2a22da2e212b19ca2f84e8d45899fb
+          path: baseline
+          persist-credentials: false
+      - name: Checkout frozen upstream
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: rustdesk/rustdesk
+          ref: fada664df7a294d1d1a9ca3e7cd3637069122f17
+          path: upstream
+          submodules: recursive
+          persist-credentials: false
+      - name: Prepare shared profile and Sciter entry points
+        working-directory: .
+        run: |
+          python -m py_compile scripts/custom-9394/sciter.py scripts/custom-9394/platforms.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/custom-9394/sciter.py prepare
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C upstream diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install x86 LLVM and Clang
+        uses: rustdesk-org/install-llvm-action-32bit@6aa7d9ad3df84dff01cd4596dd0fc880a7f47fce
+        with:
+          version: '15.0.6'
+      - name: Install pinned x86 Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: nightly-2023-10-13-i686-pc-windows-msvc
+          targets: i686-pc-windows-msvc
+          components: rustfmt
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          workspaces: upstream -> target
+          prefix-key: custom9394-sciter-x86-nightly20231013
+          cache-on-failure: true
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:/vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          doNotCache: false
+      - name: Build x86 static native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$VCPKG_ROOT/vcpkg" install --triplet x86-windows-static --x-install-root="$VCPKG_ROOT/installed"
+      - name: Build Sciter x86 client
+        env:
+          RUSTDESK_PRESET_PASSWORD: ${{ secrets.RUSTDESK_PRESET_PASSWORD }}
+        run: |
+          if (-not $env:RUSTDESK_PRESET_PASSWORD) { throw 'Preset password secret missing' }
+          python res/inline-sciter.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked --features inline,vram,hwcodec --release --bins
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force Release | Out-Null
+          Copy-Item target/release/rustdesk.exe Release/rustdesk.exe
+          Invoke-WebRequest https://raw.githubusercontent.com/c-smile/sciter-sdk/1c6b588cd090506d4b044dead06d7eae6e2235b7/bin.win/x32/sciter.dll -OutFile Release/sciter.dll
+          Invoke-WebRequest https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive -LiteralPath usbmmidd_v2.zip -DestinationPath .
+          foreach ($name in @('deviceinstaller.exe', 'usbmmidd.bat')) {
+            $p = Join-Path (Resolve-Path usbmmidd_v2).Path $name
+            if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p }
+          }
+          Copy-Item -LiteralPath usbmmidd_v2 -Destination Release/usbmmidd_v2 -Recurse
+      - name: Pack complete x86 Sciter executable
+        run: |
+          python -m pip install brotli==1.1.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = Get-Content -LiteralPath res/manifest.xml
+          $manifest | Where-Object { $_ -notmatch 'dpiAware' } | Set-Content -LiteralPath res/manifest.xml
+          Push-Location libs/portable
+          python generate.py -f ../../Release -o . -e ../../Release/rustdesk.exe -l 6
+          $packExit = $LASTEXITCODE
+          Pop-Location
+          if ($packExit -ne 0) { exit $packExit }
+          New-Item -ItemType Directory -Force ../dist | Out-Null
+          Copy-Item target/release/rustdesk-portable-packer.exe ../dist/x86-sciter.exe
+          $sig = Get-AuthenticodeSignature ../dist/x86-sciter.exe
+          if ($sig.Status -ne 'NotSigned') { throw "Unexpected signature state: $($sig.Status)" }
+      - name: Version smoke test without installation
+        run: |
+          $p = Start-Process -FilePath (Resolve-Path Release/rustdesk.exe).Path -ArgumentList '--version' -WindowStyle Hidden -PassThru
+          if (-not $p.WaitForExit(30000)) { $p.Kill(); throw 'Version command timed out' }
+          if ($p.ExitCode -ne 0) { throw "Version command failed: $($p.ExitCode)" }
+          @{version_smoke='PASS'; authenticode='NotSigned'} | ConvertTo-Json | Set-Content -Encoding utf8 ../dist/x86-sciter-validation.json
+      - name: Verify I386 PE32, exact embedded bundle and profile
+        working-directory: .
+        run: |
+          python scripts/custom-9394/sciter.py verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Content dist/x86-sciter-SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: verified-x86-sciter-${{ github.run_id }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: failure()
+        with:
+          name: sciter-diagnostics-${{ github.run_id }}
+          path: |
+            upstream/custom-9394-changes.json
+            upstream/Cargo.lock
+            dist/*.json
+          if-no-files-found: ignore
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: verified-x86-sciter-${{ github.run_id }}
+          path: dist/
+      - name: Validate and append Sciter package to existing formal release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/custom-9394/sciter.py publish
