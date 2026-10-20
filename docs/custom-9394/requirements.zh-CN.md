@@ -491,3 +491,6 @@ ARM64 artifact上传6个文件，比五项发布正文多一个签名辅助文�
 ### P047 新版Rustup拦截旧i686 host工具链
 
 首次Sciter任务39359619230在安装工具链阶段失败：rustup提示nightly-2023-10-13-i686-pc-windows-msvc may not be able to run on this system，并要求--force-non-host。配置准备及32位LLVM已通过，尚未编译客户端。GitHub Windows2022 runner为64位、可通过WOW64运行32位程序；保持上游指定的i686编译器及版本，改用显式rustup toolchain install --force-non-host，再选择该已安装工具链并打印rustc详细版本。该选项只允许安装交叉host工具链，不关闭产品安全检查、不更换依赖或服务器参数。重试必须实际运行i686 rustc成功并继续PE32/完整包校验。
+
+
+P047续：第二轮39359902783日志确认旧i686工具链已成功安装（rustc1.75.0-nightly e20cb7702），失败点移至rustup default同样需要--force-non-host。依照[Rustup1.28变更说明](https://blog.rust-lang.org/2025/03/02/Rustup-1.28.0/)，安装和设为默认两步均显式指定此选项；保持编译器日期和host一致。
