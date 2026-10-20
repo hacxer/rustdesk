@@ -1,8 +1,8 @@
 # RustDesk 9394 定制客户端：需求与实施方案
 
-- 版本：0.8，2026-10-20（Asia/Shanghai；新增Windows x86 Sciter）
+- 版本：0.8，2026-10-20（Asia/Shanghai；Windows x86 Sciter已发布）
 - 仓库：https://github.com/hacxer/rustdesk
-- 状态：v0.7三平台已发布；v0.8新增Windows 32位Sciter构建中，沿用build9配置，原附件不变。T2及新增平台完整设备验收仍待完成。
+- 状态：v0.8 Windows 32位Sciter已通过构建、PE32、完整包及冒烟校验并追加原正式版；沿用build9配置，原三平台附件不变。T2及新增平台完整设备验收仍待完成。
 - 用户消息为需求来源；截图用于核对参数，旧工作流用于分析现状，不自动扩展本次需求。
 
 ## 1. 需求清单
@@ -494,3 +494,14 @@ ARM64 artifact上传6个文件，比五项发布正文多一个签名辅助文�
 
 
 P047续：第二轮39359902783日志确认旧i686工具链已成功安装（rustc1.75.0-nightly e20cb7702），失败点移至rustup default同样需要--force-non-host。依照[Rustup1.28变更说明](https://blog.rust-lang.org/2025/03/02/Rustup-1.28.0/)，安装和设为默认两步均显式指定此选项；保持编译器日期和host一致。
+
+
+### v0.8 Sciter追加发布完成（2026-10-20 11:11，Asia/Shanghai）
+
+[Actions39360221285](https://github.com/hacxer/rustdesk/actions/runs/39360221285)的build118424430116和publish118433227249均成功；来源扩展提交350cb6e7e2ea34ea7a5534e2712cacf2eb9b3931，固定上游、build9公开配置及共用初始化模块摘要校验通过。P047已解决：日志确认rustc1.75.0-nightly(e20cb7702)、host i686-pc-windows-msvc实际运行成功；x86静态依赖、Sciter主程序与自解压外壳均已完成。
+
+- 正式下载：[x86-sciter.exe](https://github.com/hacxer/rustdesk/releases/download/v1.5.0-9394-build9/x86-sciter.exe)。主程序、Sciter DLL及外壳均I386/PE32，完整payload逐文件解压对比与MD5/SHA-256检查通过，外壳确认实际内嵌本次data.bin；版本命令退出0，Authenticode NotSigned。Sciter SDK固定1c6b588cd090506d4b044dead06d7eae6e2235b7，sciter-rs固定674e07d3066ca9a92ced3816203ab6b652629d1e。
+- EXE字节数15,217,152，SHA-256：a9eb897532e189d2c1f16300f566fc6f210092dbdfe942b9cb6950643576a3e4；产品源码版本1.5.0，定制profile为build9。独立manifest、验证JSON及x86-sciter-SHA256SUMS已一并上传。
+- verified artifact12238395326，ZIP14,789,250字节，ZIP SHA-256 dbb981c201a3d033285227034f180a966ff92149549bc7d84b6bb2480a9b86e7；与EXE摘要区分。
+- 原Release ID417427248、tag目标ece437c54f2a22da2e212b19ca2f84e8d45899fb及全部原15项上传附件ID/大小/摘要保持不变；新增4项附件全部uploaded且服务端摘要与本地runner结果一致，当前19项上传附件，另有GitHub两项源码归档。正式非预发布且Latest保持本版。
+- Windows32/64位实际远控、输入/文件/剪贴板、安装服务与重启、旧Windows兼容及30分钟稳定性仍待用户设备验收；T2 Android真机状态不变。助手没有在本地安装工具或运行新EXE，源码修改、构建、检查和上传全在GitHub完成。
